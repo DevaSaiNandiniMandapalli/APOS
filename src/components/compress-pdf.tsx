@@ -1,0 +1,77 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { checkPdfHeader, PDF_LIMITS } from "@/lib/pdf-limits";
+import { compressionSizeReport } from "@/lib/compress-pdf";
+
+type Reply = { ok: boolean; bytes?: ArrayBuffer; inputBytes?: number; outputBytes?: number; pageCount?: number; error?: string };
+type CompressionResult = { url: string; name: string; inputBytes: number; outputBytes: number; pageCount: number };
+const formatBytes = (bytes: number) => bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+
+export default function CompressPdf() {
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<CompressionResult | null>(null);
+  const workerRef = useRef<Worker | null>(null);
+  const resultUrlRef = useRef<string | null>(null);
+  const taskRef = useRef(0);
+  const mountedRef = useRef(false);
+
+  const clearResult = () => { if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current); resultUrlRef.current = null; setResult(null); };
+  const selectFile = async (selected: File | undefined) => {
+    if (!selected || busy) return;
+    clearResult(); setError(""); setFile(null);
+    if (!selected.size) { setError("The selected file is empty."); return; }
+    if (selected.size > PDF_LIMITS.perFileBytes) { setError("The PDF exceeds the 50 MB file limit."); return; }
+    try {
+      const head = new Uint8Array(await selected.slice(0, 1024).arrayBuffer());
+      if (!checkPdfHeader(head)) { setError("This file does not have a PDF signature."); return; }
+      setFile(selected);
+    } catch { setError("Unable to read the selected file."); }
+  };
+  const compress = async () => {
+    if (!file) return;
+    clearResult(); setError(""); setBusy(true);
+    const task = ++taskRef.current;
+    try {
+      const buffer = await file.arrayBuffer();
+      if (task !== taskRef.current) { new Uint8Array(buffer).fill(0); return; }
+      const worker = new Worker(new URL("@/workers/compress-pdf.worker.ts", import.meta.url), { type: "module" });
+      workerRef.current = worker;
+      worker.onmessage = (event: MessageEvent<Reply>) => {
+        worker.terminate(); workerRef.current = null;
+        if (!mountedRef.current || task !== taskRef.current) { if (event.data.bytes) new Uint8Array(event.data.bytes).fill(0); return; }
+        setBusy(false);
+        if (!event.data.ok || !event.data.bytes || event.data.inputBytes === undefined || event.data.outputBytes === undefined || !event.data.pageCount) {
+          setError(event.data.error ?? "Compression could not be completed."); return;
+        }
+        const blob = new Blob([event.data.bytes], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob); resultUrlRef.current = url;
+        new Uint8Array(event.data.bytes).fill(0);
+        const stem = file.name.replace(/\.pdf$/i, "").replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-").slice(0, 100) || "document";
+        setResult({ url, name: `${stem}-compressed.pdf`, inputBytes: event.data.inputBytes, outputBytes: event.data.outputBytes, pageCount: event.data.pageCount });
+      };
+      worker.onerror = () => { worker.terminate(); workerRef.current = null; if (mountedRef.current && task === taskRef.current) { setBusy(false); setError("PDF processing stopped unexpectedly."); } };
+      worker.postMessage({ file: buffer }, [buffer]);
+    } catch { if (mountedRef.current && task === taskRef.current) { setBusy(false); setError("Unable to read the selected file."); } }
+  };
+  const cancel = () => { taskRef.current += 1; workerRef.current?.terminate(); workerRef.current = null; setBusy(false); setError("Compression cancelled. Temporary in-memory data was released."); };
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; taskRef.current += 1; workerRef.current?.terminate(); workerRef.current = null; if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current); resultUrlRef.current = null; };
+  }, []);
+
+  const report = result ? compressionSizeReport(result.inputBytes, result.outputBytes) : "";
+
+  return <section className="merge-panel" aria-labelledby="compress-heading">
+    <h2 id="compress-heading">Compress PDF on this device</h2>
+    <p>Rewrites the PDF structure and measures the result. This does not recompress embedded images.</p>
+    <div className="privacy-note">Limit: one PDF up to {PDF_LIMITS.perFileBytes / 1024 / 1024} MB and {PDF_LIMITS.pages} pages. Compression may not reduce every file; actual sizes are always shown.</div>
+    <label className="file-picker">Choose a PDF<input type="file" accept="application/pdf,.pdf" disabled={busy} onChange={(event) => { void selectFile(event.currentTarget.files?.[0]); event.currentTarget.value = ""; }}/></label>
+    {file && <p className="route-note"><strong>{file.name}</strong> · {formatBytes(file.size)}</p>}
+    <div className="merge-actions"><button type="button" className="hero-cta" disabled={busy || !file} onClick={() => void compress()}>{busy ? "Compressing…" : "Compress PDF"}</button>{busy && <button type="button" onClick={cancel}>Cancel</button>}</div>
+    {busy && <p role="status" aria-live="polite">Rewriting and validating the document in a browser worker. Progress is indeterminate.</p>}{error && <p role="alert" className="merge-error">{error}</p>}
+    {result && <div role="status" className="merge-success"><p>{report}</p><p>Input: {formatBytes(result.inputBytes)} · Output: {formatBytes(result.outputBytes)} · {result.pageCount} pages</p><a href={result.url} download={result.name}>Download rewritten PDF</a></div>}
+  </section>;
+}

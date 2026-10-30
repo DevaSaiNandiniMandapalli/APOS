@@ -19,6 +19,8 @@ export const studioDefinitions = [
 ] as const;
 
 export type StudioId = typeof studioDefinitions[number]["id"];
+export type ToolStatus = "planned" | "in-development" | "available" | "unavailable";
+type ToolDefinition = { id: string; name: string; studioId: StudioId; description: string; status: ToolStatus; icon: string; unavailableReason?: string };
 export const studioById = Object.fromEntries(studioDefinitions.map((studio) => [studio.id, studio])) as Record<StudioId, typeof studioDefinitions[number]>;
 
 export const exhaustiveStudioCoverage = {
@@ -39,13 +41,30 @@ export const exhaustiveStudioCoverage = {
   "developer-studio": true
 } satisfies Record<StudioId, true>;
 
-export const toolDefinitions = [
-  { id: "merge-pdf", name: "Merge PDF", studioId: "pdf-essentials", description: "Combine PDF documents into a single file.", status: "planned", icon: "Combine" },
+export const toolDefinitions: readonly ToolDefinition[] = [
+  { id: "merge-pdf", name: "Merge PDF", studioId: "pdf-essentials", description: "Combine PDF documents into a single file on this device.", status: "available", icon: "Combine" },
+  { id: "split-pdf", name: "Split PDF", studioId: "pdf-essentials", description: "Extract selected page ranges into separate PDF files on this device.", status: "available", icon: "Scissors" },
+  { id: "rotate-pdf", name: "Rotate PDF", studioId: "pdf-essentials", description: "Rotate all or selected pages in a PDF on this device.", status: "available", icon: "RotateCw" },
   { id: "pdf-to-office", name: "PDF to Office", studioId: "pdf-conversion", description: "Convert PDF content into editable office formats.", status: "planned", icon: "ArrowRightLeft" },
   { id: "edit-pdf", name: "Edit PDF", studioId: "pdf-editor", description: "Make precise text and annotation changes.", status: "planned", icon: "FilePenLine" },
-  { id: "organize-pages", name: "Organize pages", studioId: "pdf-organizer-layout", description: "Reorder, rotate, and remove document pages.", status: "planned", icon: "LayoutGrid" },
-  { id: "sign-pdf", name: "Sign PDF", studioId: "pdf-security-signature", description: "Add a signature to a PDF document.", status: "planned", icon: "PenTool" },
-  { id: "compress-pdf", name: "Compress PDF", studioId: "pdf-repair-optimization", description: "Reduce PDF file size while preserving readability.", status: "planned", icon: "Minimize2" },
+  { id: "organize-pages", name: "Reorder PDF pages", studioId: "pdf-organizer-layout", description: "Arrange every page into a new order on this device.", status: "available", icon: "LayoutGrid" },
+  { id: "delete-pdf-pages", name: "Delete PDF pages", studioId: "pdf-organizer-layout", description: "Remove selected pages from a PDF on this device.", status: "available", icon: "Trash2" },
+  { id: "extract-pdf-pages", name: "Extract PDF pages", studioId: "pdf-organizer-layout", description: "Create a PDF from selected pages on this device.", status: "available", icon: "FileOutput" },
+  { id: "duplicate-pdf-pages", name: "Duplicate PDF pages", studioId: "pdf-organizer-layout", description: "Append copies of selected PDF pages.", status: "available", icon: "Copy" },
+  { id: "add-blank-pdf-pages", name: "Add blank PDF pages", studioId: "pdf-organizer-layout", description: "Insert blank pages that match the neighboring page size.", status: "available", icon: "FilePlus2" },
+  { id: "sign-pdf", name: "Sign PDF", studioId: "pdf-security-signature", description: "Create a visual signature appearance; cryptographic signing is not available.", status: "planned", icon: "PenTool" },
+  { id: "protect-pdf", name: "Protect PDF", studioId: "pdf-security-signature", description: "Encrypt a PDF with separate opening and owner passwords using AES-256.", status: "available", icon: "LockKeyhole" },
+  { id: "redact-pdf", name: "Redact PDF", studioId: "pdf-security-signature", description: "Permanently remove selected sensitive content from a PDF.", status: "planned", icon: "ShieldAlert" },
+  { id: "unlock-pdf", name: "Unlock PDF", studioId: "pdf-security-signature", description: "Remove encryption with an authorized password while preserving document structure.", status: "planned", icon: "LockKeyholeOpen" },
+  { id: "compress-pdf", name: "Compress PDF", studioId: "pdf-repair-optimization", description: "Rewrite PDF structure and report the measured size change.", status: "available", icon: "Minimize2" },
+  { id: "repair-pdf", name: "Repair PDF", studioId: "pdf-repair-optimization", description: "Recover supported damaged PDF structures.", status: "planned", icon: "Wrench" },
+  { id: "optimize-pdf", name: "Optimize PDF", studioId: "pdf-repair-optimization", description: "Optimize supported PDF structure and report measured results.", status: "planned", icon: "Sparkles" },
+  { id: "pdf-to-images", name: "PDF to Images", studioId: "pdf-conversion", description: "Render selected PDF pages as validated PNG or JPG images.", status: "available", icon: "Images" },
+  { id: "pdf-to-text", name: "PDF to Text", studioId: "pdf-conversion", description: "Extract selectable PDF text into UTF-8 plain text files.", status: "available", icon: "FileOutput" },
+  { id: "pdf-to-html", name: "PDF to HTML", studioId: "pdf-conversion", description: "Extract PDF text into a safe, self-contained HTML reading view.", status: "available", icon: "FileOutput" },
+  { id: "images-to-pdf", name: "Images to PDF", studioId: "pdf-conversion", description: "Combine selected JPG and PNG images into a PDF.", status: "available", icon: "FileImage" },
+  { id: "pdf-watermark", name: "PDF Watermark", studioId: "pdf-essentials", description: "Add a text or image watermark to selected PDF pages.", status: "available", icon: "Stamp" },
+  { id: "pdf-page-numbers", name: "PDF Page Numbers", studioId: "pdf-essentials", description: "Add page numbering to selected pages.", status: "available", icon: "ListOrdered" },
   { id: "image-converter", name: "Image converter", studioId: "image-studio", description: "Convert common image formats for your workflow.", status: "planned", icon: "ImagePlus" },
   { id: "ocr-pdf", name: "OCR PDF", studioId: "ocr-scanning-studio", description: "Recognize text in scanned documents.", status: "planned", icon: "ScanLine" },
   { id: "document-to-pdf", name: "Document to PDF", studioId: "document-studio", description: "Create a PDF from a text document.", status: "planned", icon: "FileOutput" },
@@ -54,8 +73,8 @@ export const toolDefinitions = [
   { id: "document-summary", name: "Document summary", studioId: "ai-studio", description: "Get a concise summary of a document.", status: "planned", icon: "ListChecks" },
   { id: "workflow-builder", name: "Workflow builder", studioId: "automation-studio", description: "Connect document steps into repeatable workflows.", status: "planned", icon: "Workflow" },
   { id: "file-inspector", name: "File inspector", studioId: "utility-studio", description: "Review basic properties of a document file.", status: "planned", icon: "ScanSearch" },
-  { id: "pdf-metadata", name: "PDF metadata", studioId: "developer-studio", description: "Inspect and manage PDF document metadata.", status: "planned", icon: "Braces" }
-] as const;
+  { id: "pdf-metadata", name: "PDF metadata", studioId: "developer-studio", description: "Inspect and edit supported standard PDF document-information fields.", status: "available", icon: "Braces" }
+];
 
 const studioSchema = z.object({ id: z.string().min(1), name: z.string().min(1), description: z.string().min(1), icon: z.string().min(1), accent: z.string().min(1) }).strict();
 const statusSchema = z.enum(["planned", "in-development", "available", "unavailable"]);
