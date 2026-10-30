@@ -49,3 +49,5 @@ backend/.venv/Scripts/python.exe -m pytest backend/tests
 - Every listed tool is `planned`. A directory card is not an indication that a tool is implemented or available.
 - `backend/` contains a modular FastAPI application. There is no database, queue, persistent file storage, account system, or file-processing route.
 - `docs/PHASE-1.md` records the implementation boundary and remaining roadmap.
+- `docs/PHASE-2-PLAN.md` defines the incremental PDF Essentials plan and its release gates.
+- **Permanent principle:** 100% functionality, no dead buttons, no fake features. See Section 16 of `AGENTS.md`; every phase ends with a full UI control and route audit.

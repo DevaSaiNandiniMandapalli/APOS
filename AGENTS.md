@@ -331,6 +331,29 @@ Report:
 
 Follow the approved architecture. Ask before introducing any major architectural deviation.
 
+## 16. Permanent Non-Negotiable Principle — 100% Functionality
+
+**100% FUNCTIONALITY — NO DEAD BUTTONS, NO FAKE FEATURES.**
+
+APOS must ultimately be a fully functional professional office suite.
+
+1. Every visible button, link, card, menu, navigation item, dropdown, tab, toggle, search result, and interactive control must perform its advertised action.
+2. No dead buttons, placeholder click handlers, fake progress indicators, simulated conversions, dummy downloads, or misleading success messages.
+3. Every implemented feature must have real working functionality, proper loading states, error handling, success feedback, and automated tests.
+4. Every planned or unfinished feature must be clearly labelled Planned, In Development, or Coming Soon and must not pretend to work.
+5. All 15 studios must have working navigation and meaningful studio pages.
+6. Search must return real registry results and navigate to the correct tool.
+7. Theme, sidebar, preferences, responsive navigation, and all implemented settings must work and persist appropriately.
+8. PDF, image, Office, OCR, AI, and automation tools must perform genuine operations when marked Available.
+9. Upload, bulk processing, retries, cancellation, progress tracking, downloads, and temporary-file cleanup must work correctly when implemented.
+10. Every feature must work across supported desktop and mobile screen sizes and be keyboard accessible.
+11. Add automated tests for interactive controls, navigation, forms, file processing, failure states, and accessibility.
+12. Maintain the no-database, no-mandatory-account, no-permanent-file-storage architecture.
+13. Never mark a tool Available until its actual implementation and tests pass.
+14. Before every phase is complete, audit the entire UI for dead controls, broken links, missing routes, misleading labels, and nonfunctional settings.
+
+Do not implement all future tools at once. Deliver and verify real capabilities incrementally. Keep tool status labels honest throughout development.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know
