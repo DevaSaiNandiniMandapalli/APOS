@@ -1,0 +1,13 @@
+node_modules/
+.next/
+*.tsbuildinfo
+coverage/
+playwright-report/
+test-results/
+debug.log
+__pycache__/
+.pytest_cache/
+.venv/
+*.py[cod]
+backend/*.egg-info/
+dist/
