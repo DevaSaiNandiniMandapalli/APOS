@@ -56,18 +56,19 @@ export const conversionCapabilities = [
       return convertPdfFileToHtml(file, { includePageLabels: settings.includePageLabels !== false }, signal, ({ completedPages, totalPages }) => onProgress({ completed: completedPages, total: totalPages }));
     },
   },
-  ...(["png", "jpeg", "webp"] as const).flatMap((inputFormat) =>
+  ...(["png", "jpeg", "webp", "tiff"] as const).flatMap((inputFormat) =>
     (["png", "jpeg", "webp"] as const)
       .filter((outputFormat) => outputFormat !== inputFormat)
       .map((outputFormat) => {
         const extensions = { png: ".png", jpeg: ".jpg", webp: ".webp" } as const;
+        const inputExtensions = { png: [".png"], jpeg: [".jpg", ".jpeg"], webp: [".webp"], tiff: [".tif", ".tiff"] } as const;
         const mediaTypes = { png: "image/png", jpeg: "image/jpeg", webp: "image/webp" } as const;
 
         return {
           id: `${inputFormat}-to-${outputFormat}`,
           inputFormat,
           outputFormat,
-          inputExtensions: [extensions[inputFormat]],
+          inputExtensions: inputExtensions[inputFormat],
           outputExtension: extensions[outputFormat].slice(1),
           outputMediaType: mediaTypes[outputFormat],
           maxFileBytes: 25 * 1024 * 1024,

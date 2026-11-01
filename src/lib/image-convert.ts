@@ -14,6 +14,8 @@ import {
   readImageDimensions,
 } from "./image-format";
 
+import { decodeTiffToRgba } from "./tiff-image";
+
 export type ImageOutputFormat = "png" | "jpeg" | "webp";
 
 const MIME_TYPES: Record<ImageOutputFormat, string> = {
@@ -162,34 +164,56 @@ export async function convertImageFile(
       "png",
       "jpeg",
       "webp",
+      "tiff",
     ];
 
     if (!supportedInputs.includes(inputFormat)) {
-      throw new Error("Only PNG, JPEG and WebP images are supported.");
+      throw new Error("Only PNG, JPEG, WebP and supported TIFF images are accepted.");
     }
 
-    if (!imageFormatSignature(inputBytes, inputFormat)) {
-      throw new Error("The input image signature is invalid.");
+    let originalDimensions: { width: number; height: number };
+
+    if (inputFormat === "tiff") {
+      const decoded = decodeTiffToRgba(inputBytes, signal);
+
+      originalDimensions = {
+        width: decoded.width,
+        height: decoded.height,
+      };
+
+      validateDimensions(originalDimensions.width, originalDimensions.height);
+      checkAborted(signal);
+
+      const imageData = new ImageData(
+        new Uint8ClampedArray(decoded.pixels),
+        decoded.width,
+        decoded.height,
+      );
+
+      bitmap = await createImageBitmap(imageData);
+    } else {
+      if (!imageFormatSignature(inputBytes, inputFormat)) {
+        throw new Error("The input image signature is invalid.");
+      }
+
+      originalDimensions = readImageDimensions(
+        inputBytes,
+        inputFormat,
+      );
+
+      validateDimensions(
+        originalDimensions.width,
+        originalDimensions.height,
+      );
+
+      const inputMimeType = MIME_TYPES[inputFormat as ImageOutputFormat];
+
+      bitmap = await createImageBitmap(
+        new Blob([inputBuffer], { type: inputMimeType }),
+      );
     }
-
-    const originalDimensions = readImageDimensions(
-      inputBytes,
-      inputFormat,
-    );
-
-    validateDimensions(
-      originalDimensions.width,
-      originalDimensions.height,
-    );
 
     onProgress({ completed: 1, total: 4 });
-    checkAborted(signal);
-
-    const inputMimeType = MIME_TYPES[inputFormat as ImageOutputFormat];
-
-    bitmap = await createImageBitmap(
-      new Blob([inputBuffer], { type: inputMimeType }),
-    );
 
     checkAborted(signal);
 

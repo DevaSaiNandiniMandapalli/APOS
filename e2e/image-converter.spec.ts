@@ -128,6 +128,162 @@ for (const [inputFormat, outputFormat] of conversions) {
   });
 }
 
+function createTiffFixture(compression = 1): Buffer {
+  const width = 32;
+  const height = 24;
+  const samples = 3;
+  const entryCount = 11;
+  const ifdOffset = 8;
+  const bitsOffset = ifdOffset + 2 + entryCount * 12 + 4;
+  const pixelOffset = bitsOffset + 6;
+  const pixelBytes = width * height * samples;
+  const bytes = Buffer.alloc(pixelOffset + pixelBytes);
+
+  bytes.write("II", 0, "ascii");
+  bytes.writeUInt16LE(42, 2);
+  bytes.writeUInt32LE(ifdOffset, 4);
+  bytes.writeUInt16LE(entryCount, ifdOffset);
+
+  const entries: [number, number, number, number][] = [
+    [256, 4, 1, width],
+    [257, 4, 1, height],
+    [258, 3, 3, bitsOffset],
+    [259, 3, 1, compression],
+    [262, 3, 1, 2],
+    [273, 4, 1, pixelOffset],
+    [277, 3, 1, samples],
+    [278, 4, 1, height],
+    [279, 4, 1, pixelBytes],
+    [284, 3, 1, 1],
+    [339, 3, 1, 1],
+  ];
+
+  for (let index = 0; index < entries.length; index++) {
+    const [tag, type, count, value] = entries[index];
+    const offset = ifdOffset + 2 + index * 12;
+
+    bytes.writeUInt16LE(tag, offset);
+    bytes.writeUInt16LE(type, offset + 2);
+    bytes.writeUInt32LE(count, offset + 4);
+
+    if (type === 3 && count === 1) {
+      bytes.writeUInt16LE(value, offset + 8);
+    } else {
+      bytes.writeUInt32LE(value, offset + 8);
+    }
+  }
+
+  bytes.writeUInt32LE(0, ifdOffset + 2 + entryCount * 12);
+
+  bytes.writeUInt16LE(8, bitsOffset);
+  bytes.writeUInt16LE(8, bitsOffset + 2);
+  bytes.writeUInt16LE(8, bitsOffset + 4);
+
+  for (let pixel = 0; pixel < width * height; pixel++) {
+    const offset = pixelOffset + pixel * samples;
+    bytes[offset] = 220;
+    bytes[offset + 1] = 70;
+    bytes[offset + 2] = 90;
+  }
+
+  return bytes;
+}
+
+for (const extension of ["tif", "tiff"]) {
+  for (const outputFormat of ["png", "jpeg", "webp"] as const) {
+    test(`real browser TIFF conversion: .${extension} to ${outputFormat}`, async ({ page }) => {
+      await page.goto("/tools/image-converter");
+
+      const inputBytes = createTiffFixture();
+
+      await page.getByLabel("Output format").selectOption(outputFormat);
+
+      await page.locator('input[type="file"]').setInputFiles({
+        name: `browser-tiff-fixture.${extension}`,
+        mimeType: "image/tiff",
+        buffer: inputBytes,
+      });
+
+      await expect(
+        page.locator(".conversion-item").getByText(/detected TIFF/),
+      ).toBeVisible();
+
+      await page.getByRole("button", {
+        name: "Convert 1 queued image",
+      }).click();
+
+      await expect(page.getByText(/Batch: 1 complete/)).toBeVisible({
+        timeout: 15000,
+      });
+
+      const downloadPromise = page.waitForEvent("download");
+
+      await page.getByRole("link", {
+        name: new RegExp(
+          `browser-tiff-fixture.*\\.${outputFormat === "jpeg" ? "jpg" : outputFormat}$`,
+          "i",
+        ),
+      }).click();
+
+      const download = await downloadPromise;
+
+      expect(download.suggestedFilename()).toMatch(
+        new RegExp(`\\.${outputFormat === "jpeg" ? "jpg" : outputFormat}$`, "i"),
+      );
+
+      const stream = await download.createReadStream();
+      if (!stream) throw new Error("The TIFF conversion download is unavailable.");
+
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+
+      const outputBytes = Buffer.concat(chunks);
+
+      expect(outputBytes.length).toBeGreaterThan(0);
+      expect(signatureChecks[outputFormat](outputBytes)).toBe(true);
+
+      const dimensions = await page.evaluate(async (base64) => {
+        const binary = atob(base64);
+        const bytes = Uint8Array.from(binary, (character) =>
+          character.charCodeAt(0),
+        );
+        const bitmap = await createImageBitmap(
+          new Blob([bytes], { type: "application/octet-stream" }),
+        );
+
+        const result = { width: bitmap.width, height: bitmap.height };
+        bitmap.close();
+        return result;
+      }, outputBytes.toString("base64"));
+
+      expect(dimensions).toEqual({ width: 32, height: 24 });
+    });
+  }
+}
+
+test("rejects unsupported compressed TIFF input", async ({ page }) => {
+  await page.goto("/tools/image-converter");
+
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "compressed-fixture.tiff",
+    mimeType: "image/tiff",
+    buffer: createTiffFixture(5),
+  });
+
+  await expect(
+    page.locator(".conversion-item").getByText(/detected TIFF/),
+  ).toBeVisible();
+
+  await page.getByRole("button", {
+    name: "Convert 1 queued image",
+  }).click();
+
+  await expect(
+    page.locator(".conversion-item").getByText(
+      "Only uncompressed TIFF images are currently supported.",
+    ),
+  ).toBeVisible({ timeout: 15000 });
+});
 test("resizes images while preserving aspect ratio", async ({ page }) => {
   await page.goto("/tools/image-converter");
   const inputBytes = await createImageFixture(page, "png");

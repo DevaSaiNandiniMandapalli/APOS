@@ -40,6 +40,74 @@ function imageBytes(format: Format, width: number, height: number): Uint8Array {
   return bytes;
 }
 
+
+function makeTiffFile() {
+  const width = 2;
+  const height = 1;
+  const pixels = [10, 200];
+
+  const entries = [
+    { tag: 256, type: 4, values: [width] },
+    { tag: 257, type: 4, values: [height] },
+    { tag: 258, type: 3, values: [8] },
+    { tag: 259, type: 3, values: [1] },
+    { tag: 262, type: 3, values: [1] },
+    { tag: 273, type: 4, values: [0] },
+    { tag: 277, type: 3, values: [1] },
+    { tag: 278, type: 4, values: [height] },
+    { tag: 279, type: 4, values: [pixels.length] },
+    { tag: 284, type: 3, values: [1] },
+  ] satisfies { tag: number; type: 3 | 4; values: number[] }[];
+
+  entries.sort((a, b) => a.tag - b.tag);
+
+  const ifdEnd = 8 + 2 + entries.length * 12 + 4;
+  const extraLength = 0;
+  const pixelOffset = ifdEnd + extraLength;
+  const bytes = new Uint8Array(pixelOffset + pixels.length);
+  const view = new DataView(bytes.buffer);
+
+  bytes[0] = 0x49;
+  bytes[1] = 0x49;
+  view.setUint16(2, 42, true);
+  view.setUint32(4, 8, true);
+  view.setUint16(8, entries.length, true);
+
+  let position = 10;
+
+  for (const entry of entries) {
+    const byteLength = entry.values.length * (entry.type === 3 ? 2 : 4);
+
+    view.setUint16(position, entry.tag, true);
+    view.setUint16(position + 2, entry.type, true);
+    view.setUint32(position + 4, entry.values.length, true);
+
+    const valuePosition = byteLength > 4 ? position + 8 : position + 8;
+
+    if (entry.tag === 273) {
+      view.setUint32(valuePosition, pixelOffset, true);
+    } else {
+      entry.values.forEach((value, index) => {
+        if (entry.type === 3) {
+          view.setUint16(valuePosition + index * 2, value, true);
+        } else {
+          view.setUint32(valuePosition + index * 4, value, true);
+        }
+      });
+    }
+
+    position += 12;
+  }
+
+  view.setUint32(position, 0, true);
+  bytes.set(pixels, pixelOffset);
+
+  return {
+    name: "sample.tif",
+    size: bytes.byteLength,
+    arrayBuffer: async () => bytes.slice().buffer as ArrayBuffer,
+  };
+}
 function makeBlob(bytes: Uint8Array, type: string): Blob {
   return new Blob([bytes.slice().buffer as ArrayBuffer], { type });
 }
@@ -133,6 +201,47 @@ describe("image conversion engine", () => {
     expect(canvas.height).toBe(0);
   });
 
+
+  it.each(["png", "jpeg", "webp"] as const)(
+    "converts a real TIFF fixture to %s",
+    async (output) => {
+      currentOutputFormat = output;
+      bitmap.width = 2;
+      bitmap.height = 1;
+
+      class MockImageData {
+        constructor(
+          public data: Uint8ClampedArray,
+          public width: number,
+          public height: number,
+        ) {}
+      }
+
+      const imageDataConstructor = vi.fn(MockImageData);
+      vi.stubGlobal("ImageData", imageDataConstructor);
+
+      const result = await convertImageFile(
+        makeTiffFile(),
+        output,
+        {},
+        new AbortController().signal,
+        vi.fn(),
+      );
+
+      expect(imageDataConstructor).toHaveBeenCalledOnce();
+      expect(imageDataConstructor).toHaveBeenCalledWith(
+        expect.any(Uint8ClampedArray),
+        2,
+        1,
+      );
+      expect(result.bytes).toBeInstanceOf(Uint8Array);
+      expect(result.bytes.length).toBeGreaterThan(0);
+      expect(context.drawImage).toHaveBeenCalledOnce();
+      expect(bitmap.close).toHaveBeenCalledOnce();
+      expect(canvas.width).toBe(0);
+      expect(canvas.height).toBe(0);
+    },
+  );
   it("resizes while preserving aspect ratio", async () => {
     currentOutputFormat = "png";
 
@@ -191,7 +300,7 @@ describe("image conversion engine", () => {
     );
   });
 
-  it("rejects unsupported TIFF input", async () => {
+  it("rejects incomplete TIFF input", async () => {
     const bytes = new Uint8Array([0x49, 0x49, 0x2a, 0]);
 
     const file = {
@@ -208,7 +317,7 @@ describe("image conversion engine", () => {
         new AbortController().signal,
         vi.fn(),
       ),
-    ).rejects.toThrow("Only PNG, JPEG and WebP images are supported.");
+    ).rejects.toThrow("The TIFF file is incomplete.");
   });
 
   it("rejects an oversized input before reading it", async () => {
@@ -291,7 +400,7 @@ describe("image conversion engine", () => {
         new AbortController().signal,
         vi.fn(),
       ),
-    ).rejects.toThrow("Only PNG, JPEG and WebP images are supported.");
+    ).rejects.toThrow("Only PNG, JPEG, WebP and supported TIFF images are accepted.");
   });
 
   it("rejects a null canvas output", async () => {

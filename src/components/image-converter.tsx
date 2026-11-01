@@ -127,10 +127,10 @@ export default function ImageConverter() {
         if (epoch !== validationRef.current) return;
 
         const detected = identifyInputFormat(header);
-        if (!["png", "jpeg", "webp"].includes(detected)) {
+        if (!["png", "jpeg", "webp", "tiff"].includes(detected)) {
           throw new Error(detected === "tiff"
-            ? "TIFF input is recognized but is not supported by this converter."
-            : "Unsupported or unrecognized image format. Choose PNG, JPEG or WebP.");
+            ? "This TIFF variant is not supported. Use a classic, uncompressed, 8-bit grayscale or RGB TIFF image."
+            : "Unsupported or unrecognized image format. Choose PNG, JPEG, WebP or a supported TIFF image.");
         }
 
         const capability = findConversionCapability(detected, outputFormat);
@@ -419,7 +419,7 @@ export default function ImageConverter() {
   return (
     <section className="merge-panel" aria-labelledby="image-converter-heading">
       <h2 id="image-converter-heading">Convert images on this device</h2>
-      <p>Convert PNG, JPEG and WebP images between supported formats. Resize images while preserving their aspect ratio. TIFF is detected but is not yet supported for conversion.</p>
+      <p>Convert PNG, JPEG, WebP and supported TIFF images to PNG, JPEG or WebP. TIFF support is limited to the first page of classic, uncompressed, 8-bit grayscale or RGB images. Resize images while preserving their aspect ratio.</p>
 
       <div className="privacy-note">
         Images are processed locally in your browser. Up to {CONVERSION_LIMITS.batchFiles} files, {formatBytes(CONVERSION_LIMITS.inputFileBytes)} each and {formatBytes(CONVERSION_LIMITS.batchBytes)} total. At most {CONVERSION_LIMITS.concurrentFiles} conversions run at once. No image upload is required.
@@ -430,7 +430,7 @@ export default function ImageConverter() {
         <input
           ref={inputRef}
           type="file"
-          accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+          accept="image/png,image/jpeg,image/webp,image/tiff,.png,.jpg,.jpeg,.webp,.tif,.tiff"
           multiple
           disabled={busy || zipBusy}
           onChange={(event) => { if (event.currentTarget.files) void addFiles(event.currentTarget.files); }}
@@ -444,7 +444,7 @@ export default function ImageConverter() {
         onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragActive(false); }}
         onDrop={(event) => { event.preventDefault(); setDragActive(false); if (event.dataTransfer.files) void addFiles(event.dataTransfer.files); }}
       >
-        Drop PNG, JPEG or WebP images here, or use the file picker.
+        Drop PNG, JPEG, WebP or supported TIFF images here, or use the file picker.
       </div>
 
       <div className="split-settings">

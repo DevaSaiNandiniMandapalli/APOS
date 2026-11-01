@@ -2,7 +2,7 @@
 import { CONVERSION_LIMITS, conversionCapabilities, findConversionCapability, identifyInputFormat, runBoundedQueue, safeOutputFilename, validateConversionInput, validateConversionOutput, validateHtmlOutput, validatePlainTextOutput } from "./conversion-engine";
 
 describe("conversion engine declarations and validation", () => {
-  it("declares PDF text/HTML and all six supported image conversion capabilities", () => {
+  it("declares PDF text/HTML and all nine supported image conversion capabilities", () => {
     expect(conversionCapabilities.map(({ id, inputFormat, outputFormat, convert }) => ({ id, inputFormat, outputFormat, hasExecutor: typeof convert === "function" }))).toEqual([
       { id: "pdf-to-text", inputFormat: "pdf", outputFormat: "txt", hasExecutor: true },
       { id: "pdf-to-html", inputFormat: "pdf", outputFormat: "html", hasExecutor: true },
@@ -12,6 +12,9 @@ describe("conversion engine declarations and validation", () => {
       { id: "jpeg-to-webp", inputFormat: "jpeg", outputFormat: "webp", hasExecutor: true },
       { id: "webp-to-png", inputFormat: "webp", outputFormat: "png", hasExecutor: true },
       { id: "webp-to-jpeg", inputFormat: "webp", outputFormat: "jpeg", hasExecutor: true },
+      { id: "tiff-to-png", inputFormat: "tiff", outputFormat: "png", hasExecutor: true },
+      { id: "tiff-to-jpeg", inputFormat: "tiff", outputFormat: "jpeg", hasExecutor: true },
+      { id: "tiff-to-webp", inputFormat: "tiff", outputFormat: "webp", hasExecutor: true },
     ]);
     expect(findConversionCapability("pdf", "txt")?.maxBatchFiles).toBe(20);
     expect(findConversionCapability("pdf", "html")?.outputExtension).toBe("html");
