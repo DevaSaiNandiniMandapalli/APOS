@@ -65,7 +65,7 @@ export const toolDefinitions: readonly ToolDefinition[] = [
   { id: "images-to-pdf", name: "Images to PDF", studioId: "pdf-conversion", description: "Combine selected JPG and PNG images into a PDF.", status: "available", icon: "FileImage" },
   { id: "pdf-watermark", name: "PDF Watermark", studioId: "pdf-essentials", description: "Add a text or image watermark to selected PDF pages.", status: "available", icon: "Stamp" },
   { id: "pdf-page-numbers", name: "PDF Page Numbers", studioId: "pdf-essentials", description: "Add page numbering to selected pages.", status: "available", icon: "ListOrdered" },
-  { id: "image-converter", name: "Image converter", studioId: "image-studio", description: "Convert common image formats for your workflow.", status: "planned", icon: "ImagePlus" },
+  { id: "image-converter", name: "Image converter", studioId: "image-studio", description: "Convert common image formats for your workflow.", status: "in-development", icon: "ImagePlus" },
   { id: "ocr-pdf", name: "OCR PDF", studioId: "ocr-scanning-studio", description: "Recognize text in scanned documents.", status: "planned", icon: "ScanLine" },
   { id: "document-to-pdf", name: "Document to PDF", studioId: "document-studio", description: "Create a PDF from a text document.", status: "planned", icon: "FileOutput" },
   { id: "spreadsheet-to-pdf", name: "Spreadsheet to PDF", studioId: "spreadsheet-studio", description: "Prepare a spreadsheet as a PDF document.", status: "planned", icon: "Sheet" },

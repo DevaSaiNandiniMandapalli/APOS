@@ -1,4 +1,5 @@
-import { checkPdfHeader } from "./pdf-limits";
+﻿import { checkPdfHeader } from "./pdf-limits";
+import { imageFormatSignature, readImageDimensions } from "./image-format";
 
 export type ConversionFormat = "pdf" | "txt" | "html" | "png" | "jpeg" | "webp" | "tiff" | "docx" | "xlsx" | "pptx" | "odt" | "ods" | "odp" | "unknown";
 export type ConversionStatus = "queued" | "validating" | "processing" | "complete" | "failed" | "skipped" | "cancelled";
@@ -55,6 +56,45 @@ export const conversionCapabilities = [
       return convertPdfFileToHtml(file, { includePageLabels: settings.includePageLabels !== false }, signal, ({ completedPages, totalPages }) => onProgress({ completed: completedPages, total: totalPages }));
     },
   },
+  ...(["png", "jpeg", "webp"] as const).flatMap((inputFormat) =>
+    (["png", "jpeg", "webp"] as const)
+      .filter((outputFormat) => outputFormat !== inputFormat)
+      .map((outputFormat) => {
+        const extensions = { png: ".png", jpeg: ".jpg", webp: ".webp" } as const;
+        const mediaTypes = { png: "image/png", jpeg: "image/jpeg", webp: "image/webp" } as const;
+
+        return {
+          id: `${inputFormat}-to-${outputFormat}`,
+          inputFormat,
+          outputFormat,
+          inputExtensions: [extensions[inputFormat]],
+          outputExtension: extensions[outputFormat].slice(1),
+          outputMediaType: mediaTypes[outputFormat],
+          maxFileBytes: 25 * 1024 * 1024,
+          maxBatchFiles: 20,
+          maxBatchBytes: 100 * 1024 * 1024,
+          validateOutput(bytes: Uint8Array) {
+            if (bytes.byteLength === 0 || !imageFormatSignature(bytes, outputFormat)) {
+              throw new Error("The generated image failed format validation.");
+            }
+            const dimensions = readImageDimensions(bytes, outputFormat);
+            if (
+              dimensions.width < 1 ||
+              dimensions.height < 1 ||
+              dimensions.width > 12000 ||
+              dimensions.height > 12000 ||
+              dimensions.width * dimensions.height > 40_000_000
+            ) {
+              throw new Error("The generated image dimensions exceed the supported limits.");
+            }
+          },
+          convert: async (file: Pick<File, "name" | "size" | "arrayBuffer">, settings: Readonly<Record<string, boolean | number | string>>, signal: AbortSignal, onProgress: (progress: ConversionProgress) => void) => {
+            const { convertImageFile } = await import("./image-convert");
+            return convertImageFile(file, outputFormat, settings, signal, onProgress);
+          },
+        } satisfies ConversionCapability;
+      })
+  ),
 ] satisfies readonly ConversionCapability[];
 
 export function findConversionCapability(inputFormat: ConversionFormat, outputFormat: ConversionFormat) {

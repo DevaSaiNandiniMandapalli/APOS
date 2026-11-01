@@ -1,14 +1,23 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { CONVERSION_LIMITS, conversionCapabilities, findConversionCapability, identifyInputFormat, runBoundedQueue, safeOutputFilename, validateConversionInput, validateConversionOutput, validateHtmlOutput, validatePlainTextOutput } from "./conversion-engine";
 
 describe("conversion engine declarations and validation", () => {
-  it("declares only a real PDF to text capability in this milestone", () => {
+  it("declares PDF text/HTML and all six supported image conversion capabilities", () => {
     expect(conversionCapabilities.map(({ id, inputFormat, outputFormat, convert }) => ({ id, inputFormat, outputFormat, hasExecutor: typeof convert === "function" }))).toEqual([
       { id: "pdf-to-text", inputFormat: "pdf", outputFormat: "txt", hasExecutor: true },
       { id: "pdf-to-html", inputFormat: "pdf", outputFormat: "html", hasExecutor: true },
+      { id: "png-to-jpeg", inputFormat: "png", outputFormat: "jpeg", hasExecutor: true },
+      { id: "png-to-webp", inputFormat: "png", outputFormat: "webp", hasExecutor: true },
+      { id: "jpeg-to-png", inputFormat: "jpeg", outputFormat: "png", hasExecutor: true },
+      { id: "jpeg-to-webp", inputFormat: "jpeg", outputFormat: "webp", hasExecutor: true },
+      { id: "webp-to-png", inputFormat: "webp", outputFormat: "png", hasExecutor: true },
+      { id: "webp-to-jpeg", inputFormat: "webp", outputFormat: "jpeg", hasExecutor: true },
     ]);
     expect(findConversionCapability("pdf", "txt")?.maxBatchFiles).toBe(20);
     expect(findConversionCapability("pdf", "html")?.outputExtension).toBe("html");
+    expect(findConversionCapability("png", "jpeg")?.outputMediaType).toBe("image/jpeg");
+    expect(findConversionCapability("webp", "png")?.outputExtension).toBe("png");
+    expect(findConversionCapability("png", "png")).toBeUndefined();
   });
 
   it("identifies inputs from signatures instead of file extensions", () => {

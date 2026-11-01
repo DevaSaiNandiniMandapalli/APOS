@@ -138,7 +138,7 @@ export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "tx
           result.bytes.fill(0); convertedBytes = null;
           const url = URL.createObjectURL(blob);
           urlsRef.current.push(url);
-          if (run === runRef.current && mountedRef.current) updateItems((existing) => existing.map((entry) => entry.id === id ? { ...entry, status: "complete", output: blob, url, outputBytes: blob.size, completedPages: result.pageCount, totalPages: result.pageCount, error: "" } : entry));
+          if (run === runRef.current && mountedRef.current) updateItems((existing) => existing.map((entry) => entry.id === id ? { ...entry, status: "complete", output: blob, url, outputBytes: blob.size, completedPages: result.pageCount ?? 0, totalPages: result.pageCount ?? 0, error: "" } : entry));
         } catch (reason) {
           convertedBytes?.fill(0);
           if (skippedRef.current.has(id)) return;
