@@ -53,3 +53,9 @@ Status: **Complete (verified)** · Branch: `lemon/design-and-build`
   - `e2e/ocr-tool.spec.ts` (2): rejects non-images, accepts an image.
   - `e2e/workflow-builder.spec.ts` (2): add/reorder/remove, JSON download.
 - Per-tool axe accessibility checks pass on all three pages.
+
+## AI milestone additions
+
+- **Document summary** (`/tools/document-summary`) extracts text from PDF, `.docx`, plain text, Markdown, CSV or JSON in the browser, sends only a bounded excerpt (12,000 characters) to `POST /api/ai`, and supports a follow-up question against the same document. Long documents are summarised from their opening section and the result says so.
+- **OCR PDF** (`/tools/ocr-pdf`) renders selected PDF pages in the browser and recognises text with Tesseract; the English model downloads on first use. Up to 20 pages per run, 25 MB per PDF.
+- Both tools degrade honestly: without `SARVAM_API_KEY` the summary tool shows the server's configuration message, and OCR never claims accuracy beyond what Tesseract returned.

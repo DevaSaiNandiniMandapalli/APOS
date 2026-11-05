@@ -28,6 +28,7 @@ const WorkflowBuilder = dynamic(() => import("@/components/workflow-builder"), {
 const FileInspector = dynamic(() => import("@/components/file-inspector"), { ssr: false, loading });
 const DocumentSummary = dynamic(() => import("@/components/document-summary"), { ssr: false, loading });
 const OcrPdf = dynamic(() => import("@/components/ocr-pdf"), { ssr: false, loading });
+const OfficeConvert = dynamic(() => import("@/components/office-convert"), { ssr: false, loading });
 
 type ToolEntry = { pill?: string; render: () => ReactNode };
 
@@ -60,6 +61,10 @@ const TOOLS: Record<string, ToolEntry> = {
   "file-inspector": { pill: "Available · browser-local file analysis", render: () => <FileInspector /> },
   "document-summary": { pill: "Available · Sarvam 105B document summary", render: () => <DocumentSummary /> },
   "ocr-pdf": { pill: "Available · browser-local OCR for scanned PDFs", render: () => <OcrPdf /> },
+  "pdf-to-office": { pill: "Available · text-based Word and Excel export", render: () => <OfficeConvert mode="pdf-to-office" /> },
+  "document-to-pdf": { pill: "Available · reflowed PDF from Word or text", render: () => <OfficeConvert mode="document-to-pdf" /> },
+  "spreadsheet-to-pdf": { pill: "Available · paginated PDF table", render: () => <OfficeConvert mode="spreadsheet-to-pdf" /> },
+  "presentation-to-pdf": { pill: "Available · text-faithful slide export", render: () => <OfficeConvert mode="presentation-to-pdf" /> },
 };
 
 class ToolErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
