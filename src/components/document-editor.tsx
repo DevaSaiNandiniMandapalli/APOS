@@ -16,9 +16,16 @@ import {
 import {
   INSERT_ORDERED_LIST_COMMAND,
   INSERT_UNORDERED_LIST_COMMAND,
+  ListNode,
+  ListItemNode,
 } from "@lexical/list";
-import { TOGGLE_LINK_COMMAND } from "@lexical/link";
-import { INSERT_TABLE_COMMAND } from "@lexical/table";
+import { LinkNode, TOGGLE_LINK_COMMAND } from "@lexical/link";
+import {
+  INSERT_TABLE_COMMAND,
+  TableNode,
+  TableCellNode,
+  TableRowNode,
+} from "@lexical/table";
 import {
   AutoFocusPlugin,
 } from "@lexical/react/LexicalAutoFocusPlugin";
@@ -43,6 +50,9 @@ import {
 import {
   RichTextPlugin,
 } from "@lexical/react/LexicalRichTextPlugin";
+import {
+  ContentEditable,
+} from "@lexical/react/LexicalContentEditable";
 import {
   TablePlugin,
 } from "@lexical/react/LexicalTablePlugin";
@@ -221,6 +231,51 @@ function getSelectionLinkUrl(editor: LexicalEditor): string | null {
   }
 }
 
+type PendingLinkAction =
+  | { kind: "insert"; url: string }
+  | { kind: "remove" }
+  | null;
+type PendingImageAction =
+  | { src: string; alt: string; width: number | null; height: number | null }
+  | null;
+
+/**
+ * Lives INSIDE the LexicalComposer tree. Registers the editor instance with the
+ * parent and drains queued link/image actions on demand. Renders nothing.
+ */
+function LexicalEditorCommands({
+  onEditorReady,
+  pendingLinkActionRef,
+  pendingImageActionRef,
+  actionVersion,
+}: {
+  onEditorReady: (editor: LexicalEditor) => void;
+  pendingLinkActionRef: { current: PendingLinkAction };
+  pendingImageActionRef: { current: PendingImageAction };
+  actionVersion: number;
+}) {
+  const [editor] = useLexicalComposerContext();
+
+  useEffect(() => {
+    onEditorReady(editor);
+  }, [editor, onEditorReady]);
+
+  useEffect(() => {
+    const link = pendingLinkActionRef.current;
+    if (link) {
+      pendingLinkActionRef.current = null;
+      toggleLink(editor, link.kind === "insert" ? link.url : null);
+    }
+    const image = pendingImageActionRef.current;
+    if (image) {
+      pendingImageActionRef.current = null;
+      insertImage(editor, image.src, image.alt, image.width, image.height);
+    }
+  }, [editor, actionVersion, pendingLinkActionRef, pendingImageActionRef]);
+
+  return null;
+}
+
 function DocumentEditorPane({ onChange }: { onChange: (document: Document) => void }) {
   const onChangeHandler = useCallback(
     (editorState: unknown, editorInstance: LexicalEditor) => {
@@ -239,7 +294,7 @@ function DocumentEditorPane({ onChange }: { onChange: (document: Document) => vo
       <HistoryPlugin />
       <RichTextPlugin
         contentEditable={
-          <div
+          <ContentEditable
             className="document-editor__pane"
             style={{
               minHeight: "55vh",
@@ -340,30 +395,12 @@ export default function DocumentEditor({
     };
   }, [document, saveStatus, justRestoredId, hasPostRestoreEdit]);
 
-  // Lexical actions are dispatched from inside the LexicalComposer tree
-  // (LexicalEditorCommandsComponent below) — never via a hook outside the provider.
-  const pendingLinkActionRef = useRef<{ kind: "insert"; url: string } | { kind: "remove" } | null>(null);
-  const pendingImageActionRef = useRef<{ src: string; alt: string; width: number | null; height: number | null } | null>(null);
-
-  // Lexical actions are dispatched from inside the LexicalComposer tree
-  // (LexicalEditorCommandsComponent below) — never via a hook outside the provider.
-  const pendingLinkActionRef = useRef<{ kind: "insert"; url: string } | { kind: "remove" } | null>(null);
-  const pendingImageActionRef = useRef<{ src: string; alt: string; width: number | null; height: number | null } | null>(null);
-
-  // Lexical actions are dispatched from inside the LexicalComposer tree
-  // (LexicalEditorCommandsComponent below) — never via a hook outside the provider.
-  const pendingLinkActionRef = useRef<{ kind: "insert"; url: string } | { kind: "remove" } | null>(null);
-
-  // ---- Lexical action pump: lives INSIDE the LexicalComposer tree ---------
-  // Thin wrapper that forwards the pending refs into the top-level component.
-  // eslint-disable-next-line react-hooks/static-components
-  const LexicalEditorCommandsWrapper = () => (
-    <LexicalEditorCommandsComponent
-      onEditorReady={setExternalEditor}
-      pendingLinkActionRef={pendingLinkActionRef}
-      pendingImageActionRef={pendingImageActionRef}
-    />
-  );
+  // Lexical actions are queued by the toolbar handlers and drained inside the
+  // LexicalComposer tree by <LexicalEditorCommands>, never via a hook outside it.
+  const pendingLinkActionRef = useRef<PendingLinkAction>(null);
+  const pendingImageActionRef = useRef<PendingImageAction>(null);
+  // Bumped whenever an action is queued so the command component drains it.
+  const [actionVersion, setActionVersion] = useState(0);
 
   const handleNew = useCallback(() => {
     if (saveStatus === "dirty" && !window.confirm("You have unsaved changes. Start a new document anyway?")) return;
@@ -457,11 +494,9 @@ export default function DocumentEditor({
 
   const handleLinkInsert = useCallback(
     (url: string) => {
-      // Dispatch via getLexicalEditor-style helper: we can't call the hook here,
-      // so use the editor instance captured in LexicalEditorCommands below.
-      // For now, stash the url and dispatch from the toolbar component.
       pendingLinkActionRef.current = { kind: "insert", url: url.trim() };
       setLinkDialog({ open: false, url: "" });
+      setActionVersion((version) => version + 1);
     },
     [],
   );
@@ -469,12 +504,14 @@ export default function DocumentEditor({
   const handleLinkRemove = useCallback(() => {
     pendingLinkActionRef.current = { kind: "remove" };
     setLinkDialog({ open: false, url: "" });
+    setActionVersion((version) => version + 1);
   }, []);
 
   const handleImageInsert = useCallback(
     (src: string, alt: string, width: number | null, height: number | null) => {
       pendingImageActionRef.current = { src, alt, width, height };
       setImageDialog({ open: false });
+      setActionVersion((version) => version + 1);
     },
     [],
   );
@@ -585,7 +622,16 @@ export default function DocumentEditor({
       <LexicalComposer
         initialConfig={{
           namespace: "document-editor",
-          nodes: [HeadingNode, ImageNode],
+          nodes: [
+            HeadingNode,
+            ImageNode,
+            ListNode,
+            ListItemNode,
+            LinkNode,
+            TableNode,
+            TableCellNode,
+            TableRowNode,
+          ],
           editable: !readOnly,
           onError: (error: Error) => {
             console.error("[APOS Document Editor]", error);
@@ -593,7 +639,12 @@ export default function DocumentEditor({
           editorState: initialEditorState,
         }}
       >
-        <LexicalEditorCommands />
+        <LexicalEditorCommands
+          onEditorReady={setExternalEditor}
+          pendingLinkActionRef={pendingLinkActionRef}
+          pendingImageActionRef={pendingImageActionRef}
+          actionVersion={actionVersion}
+        />
         {/* Header/footer zones drawn outside Lexical (text only, tokens fully supported) */}
         {pageSettings.header && (
           <div className="document-editor__header" aria-label="Header">

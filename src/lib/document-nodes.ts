@@ -66,6 +66,7 @@ export class HeadingNode extends ElementNode {
   exportJSON(): SerializedHeadingNode {
     return {
       ...super.exportJSON(),
+      type: this.getType(),
       tag: this.__tag,
     } as SerializedHeadingNode;
   }
@@ -210,6 +211,7 @@ export class ImageNode extends ElementNode {
   exportJSON(): SerializedImageNode {
     return {
       ...super.exportJSON(),
+      type: this.getType(),
       src: this.__src,
       alt: this.__alt,
       width: this.__width,

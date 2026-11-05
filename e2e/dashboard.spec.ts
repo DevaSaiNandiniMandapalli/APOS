@@ -6,6 +6,7 @@ import { toolDefinitions } from "../src/lib/registry";
 
 test("search is keyboard accessible and its result opens the tool route", async ({ page }) => {
   await page.goto("/");
+  await page.waitForLoadState("networkidle");
   await page.keyboard.press("Control+k");
   const search = page.getByRole("textbox", { name: "Search tools" });
   await expect(search).toBeFocused();

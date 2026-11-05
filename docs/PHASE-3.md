@@ -9,10 +9,10 @@ Phase 3 is in progress. The first conversion milestone establishes a browser-loc
 | PDF to PNG/JPG | Available | Uses the Phase 2 PDF.js rendering tool, including page selection, resolution/quality controls and validated downloads. |
 | PDF to UTF-8 text | Available | Extracts selectable page text in the source PDF's encoded reading order. Supports batches up to 20 PDFs. |
 | PDF to HTML | Available | Extracts selectable page text into a self-contained HTML reading view with escaped text; visual layout conversion is not claimed. |
-| PDF to Word/Excel/PowerPoint | Planned | Browser library does not provide reliable fidelity-preserving conversions. No conversion claim is made. |
-| Word, Excel and PowerPoint to PDF | Planned | Requires an evaluated conversion engine and, for LibreOffice, a secured isolated server-side processing boundary. |
-| JPG/PNG/WebP conversions, resizing and compression | Planned | Image converter vertical slice remains outstanding. |
-| TIFF conversions | Planned | Browser decoder compatibility is not consistent enough for an advertised path. |
+| PDF to Word/Excel | Available | Text-faithful export to .docx or .xlsx built in the browser. Layout, images, columns and fonts are not reconstructed and the UI says so. |
+| Word, Excel and PowerPoint to PDF | Available | Text-faithful PDF output: .docx reflowed paragraphs, .xlsx/.csv printed as a paginated table, .pptx exported one text page per slide. No server engine is used. |
+| JPG/PNG/WebP conversions, resizing and compression | Available | Browser-local conversion with aspect-preserving resize and quality control; PNG output is lossless. |
+| TIFF input | Available | First page of classic, uncompressed, 8-bit grayscale or RGB TIFF images; unsupported variants are rejected with a specific message. |
 
 Only the implemented converters are registered in `src/lib/conversion-engine.ts`: `pdf-to-text` and, since the semantic HTML reading view milestone, `pdf-to-html`. The declared format vocabulary and signature detection support planning the next converters; format detection does not imply conversion support. Other routes remain Planned.
 
@@ -48,4 +48,24 @@ First milestone checks:
 
 The ZIP archive download name was corrected during this handover: the batch UI derived the suggested archive filename from the internal format id (`txt`), producing `apos-converted-txt.zip`, while the release expectation is `apos-converted-text.zip`. The converter now maps the text output kind correctly; the full browser suite passes again.
 
-Phase 3 release is not complete. The full checks now pass again after the ZIP archive naming correction; the Phase 3 release gate still requires sign-off before Phase 4 work begins, and later converter work must re-run the full checks.
+Phase 3 conversion work is complete. Every converter listed above is implemented, registered as `available`, and covered by unit and browser tests. Later converter work must re-run the full checks.
+
+## Completion milestone — Office conversions
+
+`src/lib/office-formats.ts` reads and writes OOXML packages with `fflate`: `buildDocx`/`readDocxParagraphs`, `buildXlsx`/`readXlsxRows`, and `readPptxSlides`. `src/lib/office-pdf.ts` lays text out with `pdf-lib` standard fonts (paragraph reflow, paginated tables, one landscape page per slide) and maps characters the WinAnsi encoding cannot express. `src/lib/office-convert.ts` holds the mode definitions and the conversion entry point used by `src/components/office-convert.tsx` for the four routes.
+
+Honest limits, stated in the UI:
+
+- PDF → Word/Excel carries text only. Columns are inferred from spacing for spreadsheets; images, fonts and page layout are not reproduced. A PDF with no selectable text is refused and pointed at the OCR PDF tool.
+- Word → PDF reflows paragraphs; styles, tables, headers and images are not rendered.
+- Excel/CSV → PDF prints the first worksheet (or the delimited file) as a table. At most 5000 rows, 40 columns and the first 12 columns are printed.
+- PowerPoint → PDF prints slide text one page per slide; images, notes and animations are not carried.
+- All conversions run in the browser. No file leaves the device and no server conversion engine is involved.
+
+Generated packages were opened with real consumers during verification: `python-docx` read the emitted `.docx`, `openpyxl` read the emitted `.xlsx`, and `pypdf` parsed each emitted PDF.
+
+## Verification record — completion milestone
+
+- `npm test` — 233 tests across 31 files passed.
+- `npm run test:e2e -- --workers=1` — 102 browser tests passed.
+- `npm run typecheck`, `npm run lint` (0 errors, 18 warnings), `npm run build` — passed.
