@@ -11,3 +11,21 @@ __pycache__/
 *.py[cod]
 backend/*.egg-info/
 dist/
+
+# Environment secrets
+.env
+.env.*
+!.env.example
+
+# Credentials and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+
+# Local experimental files and backups
+apos-sarvam.ps1
+sarvam_agent.py
+*.backup
+*.before-tiff

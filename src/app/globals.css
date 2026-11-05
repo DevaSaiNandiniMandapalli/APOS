@@ -16,3 +16,54 @@
 .split-settings{margin-top:18px}.split-settings>p:first-child{color:var(--muted)}.split-settings label{display:block;font-weight:600;font-size:11px;margin-bottom:6px}.split-range-input{display:block;width:min(100%,420px);padding:10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text)}.merge-success ul{padding-left:18px}.merge-success li{margin:7px 0}.merge-success a{color:var(--purple)}
 :root .merge-success p{color:#276749}:root[data-theme="dark"] .merge-success p{color:#72c9a2}
 .drop-zone.drop-active{border-color:var(--purple);background:var(--purple-light);color:var(--text)}.conversion-list{padding:0;list-style:none}.conversion-item{align-items:flex-start!important;gap:14px!important}.conversion-item-main{display:grid;gap:8px;flex:1;min-width:0}.conversion-item-main>button{justify-self:start;border:1px solid var(--line);border-radius:5px;background:var(--surface-soft);padding:6px 9px;cursor:pointer}.conversion-setting{display:grid;grid-template-columns:minmax(105px,150px) minmax(130px,1fr);align-items:center;gap:8px;color:var(--muted);font-size:10px}.conversion-setting input,.conversion-setting select{width:100%;min-width:0;padding:7px 9px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--text)}.conversion-item-main .text-link{overflow-wrap:anywhere}.conversion-item .merge-error{font-size:11px}.conversion-item-main .tool-description{white-space:normal}.conversion-item-main .merge-filename{width:100%}
+/* APOS PDF selectable text layer */
+.apos-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-align: initial;
+  transform-origin: 0 0;
+  z-index: 1;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.apos-text-layer span {
+  position: absolute;
+  white-space: pre;
+  color: transparent;
+  cursor: text;
+  transform-origin: 0 0;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.apos-text-layer ::selection {
+  background: rgba(40, 100, 255, 0.3);
+  color: transparent;
+}
+
+/* Document Studio — headers/footers/title/autosave (Milestone 3) */
+.document-editor { display: grid; gap: 12px; }
+.document-editor__titlebar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.document-editor__title { flex: 1; min-width: 180px; font-family: Manrope, sans-serif; font-size: 16px; font-weight: 700; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-soft); color: var(--text); }
+.document-editor__file-actions, .document-editor__row { display: flex; gap: 8px; flex-wrap: wrap; }
+.document-editor__file-actions button, .document-editor__row button { border: 1px solid var(--line); border-radius: 6px; background: var(--surface-soft); padding: 6px 10px; cursor: pointer; }
+.document-editor__file-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.document-editor__status { font-size: 11px; color: var(--muted); }
+.document-editor__status-note { color: var(--muted); }
+.document-editor__recovery { padding: 12px; border: 1px solid #d9a441; border-radius: 8px; background: color-mix(in srgb, #f7e8c7 40%, var(--surface)); }
+.document-editor__error { padding: 10px 12px; border: 1px solid #c0392b; border-radius: 8px; color: #c0392b; font-size: 12px; }
+.document-editor__header, .document-editor__footer { padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft); font-size: 12px; color: var(--muted); }
+.document-editor__header p, .document-editor__footer p { margin: 0; }
+.document-editor__page-badge { display: flex; gap: 4px; font-size: 12px; color: var(--muted); padding: 2px 8px; }
+.document-editor__toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.document-editor__group { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.document-editor__group--page label { font-size: 11px; color: var(--muted); }
+.document-editor__group--page input, .document-editor__group--page select { padding: 5px 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-soft); color: var(--text); }
+.document-editor__separator { width: 1px; align-self: stretch; background: var(--line); }
+.document-editor__button--active { font-weight: 700; }
+.document-editor__dialog--overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.4); z-index: 40; }
+.document-editor__dialog--panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: min(420px, 90vw); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

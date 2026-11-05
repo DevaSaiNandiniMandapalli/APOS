@@ -37,11 +37,28 @@ test("every registry tool has a working route and honest status presentation", a
       await expect(page.getByText("This tool is not ready yet")).toBeVisible();
       await expect(page.locator('input[type="file"]')).toHaveCount(0);
     }
+    if (tool.id === "edit-pdf") {
+      await expect(page.getByText("In Development · PDF viewer")).toBeVisible();
+      await expect(page.getByRole("heading", { level: 2, name: "PDF Viewer" })).toBeVisible();
+      await expect(page.locator('input[type="file"]')).toHaveCount(1);
+    }
     if (tool.id === "pdf-to-text") {
       await expect(page.getByText("Available · browser-local batch conversion")).toBeVisible();
       await expect(page.getByLabel("Choose PDF files")).toBeVisible();
     }
   }
+});
+
+test("Edit PDF rejects a file whose content lacks a PDF signature", async ({ page }) => {
+  await page.goto("/tools/edit-pdf");
+  await expect(page.getByText("In Development · PDF viewer")).toBeVisible();
+  await page.getByLabel("Choose PDF").setInputFiles({
+    name: "not-really.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("This file is not a PDF."),
+  });
+  await expect(page.locator(".merge-error")).toContainText("does not have a valid PDF signature");
+  await expect(page.getByRole("heading", { level: 2, name: "PDF Viewer" })).toBeVisible();
 });
 
 test("PDF to text extracts real page text, resolves duplicate names, archives outputs and reports unsupported mixed inputs", async ({ page }) => {
@@ -1214,4 +1231,78 @@ test("dashboard has no automated accessibility violations", async ({ page }) => 
   await page.waitForTimeout(200);
   const darkResults = await new AxeBuilder({ page }).analyze();
   expect(darkResults.violations).toEqual([]);
+});
+
+test("Edit PDF uploads, annotates, downloads a flattened copy and retains content", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.goto("/tools/edit-pdf");
+  await expect(page.getByText("In Development · PDF viewer")).toBeVisible();
+
+  const source = await PDFDocument.create();
+  const font = await source.embedFont(StandardFonts.Helvetica);
+  source.addPage([600, 800]).drawText("Original page text", { x: 50, y: 700, size: 18, font });
+  const fixture = Buffer.from(await source.save());
+
+  await page.getByLabel("Choose PDF").setInputFiles({
+    name: "document.pdf",
+    mimeType: "application/pdf",
+    buffer: fixture,
+  });
+  await expect(page.getByText("document.pdf")).toBeVisible();
+
+  const layer = page.locator('[data-testid="pdf-annotation-layer"]');
+  await expect.poll(() => layer.boundingBox(), { timeout: 10000 }).toBeTruthy();
+
+  // Add a text-box annotation by dragging on the page layer.
+  await page.getByRole("button", { name: "Text box" }).click();
+  await page.getByLabel("Text box content").fill("Annotated note");
+  await expect(page.getByLabel("Text box content")).toHaveValue("Annotated note");
+  const layerEl = await layer.elementHandle();
+  expect(layerEl).toBeTruthy();
+  const box = await layer.boundingBox();
+  expect(box).toBeTruthy();
+
+  await layerEl!.evaluate((el, { sx, sy, ex, ey }: { sx: number; sy: number; ex: number; ey: number }) => {
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + sx; const cy = rect.top + sy;
+    const ex2 = rect.left + ex; const ey2 = rect.top + ey;
+    el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, clientX: cx, clientY: cy, pointerId: 1, pointerType: "mouse" }));
+    el.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, cancelable: true, clientX: ex2, clientY: ey2, pointerId: 1, pointerType: "mouse" }));
+    el.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, clientX: ex2, clientY: ey2, pointerId: 1, pointerType: "mouse" }));
+  }, { sx: 60, sy: 100, ex: 300, ey: 260 });
+
+  await expect(page.getByText("Text box annotation 1: Annotated note")).toBeVisible();
+
+  // Add a rectangle annotation.
+  await page.getByRole("button", { name: "Rectangle" }).click();
+  const rectLayerEl = await layer.elementHandle();
+  expect(rectLayerEl).toBeTruthy();
+  await rectLayerEl!.evaluate((el, { sx, sy, ex, ey }: { sx: number; sy: number; ex: number; ey: number }) => {
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + sx; const cy = rect.top + sy;
+    const ex2 = rect.left + ex; const ey2 = rect.top + ey;
+    el.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, clientX: cx, clientY: cy, pointerId: 1, pointerType: "mouse" }));
+    el.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, cancelable: true, clientX: ex2, clientY: ey2, pointerId: 1, pointerType: "mouse" }));
+    el.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, clientX: ex2, clientY: ey2, pointerId: 1, pointerType: "mouse" }));
+  }, { sx: 80, sy: 300, ex: 260, ey: 420 });
+
+  await expect(page.getByText(/Rectangle annotation/)).toBeVisible();
+
+  // Download the flattened edited PDF.
+  const downloadEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download edited PDF" }).click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe("document-annotated.pdf");
+
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+  const output = await PDFDocument.load(Buffer.concat(chunks));
+
+  expect(output.getPageCount()).toBe(1);
+  const assets = output.getPage(0).extractContents();
+  const texts = assets.filter((a) => a.kind === "text").map((a) => (a.kind === "text" ? a.getText() : ""));
+  expect(texts.join(" ")).toContain("Original page text");
+  expect(texts.join(" ")).toContain("Annotated note");
+  expect(assets.filter((a) => a.kind === "graphics").length).toBeGreaterThanOrEqual(1);
 });
