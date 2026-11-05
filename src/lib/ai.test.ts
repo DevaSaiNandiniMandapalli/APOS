@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMessages, buildRequest, DEFAULT_MODEL, extractAnswer, MAX_INPUT_CHARS, validateAiInput } from "./ai";
+import { buildMessages, buildRequest, DEFAULT_MODEL, extractAnswer, MAX_INPUT_CHARS, MAX_RESPONSE_TOKENS, validateAiInput } from "./ai";
 
 describe("validateAiInput", () => {
   it("rejects empty text", () => {
@@ -40,5 +40,10 @@ describe("extractAnswer", () => {
   it("returns null for unknown shapes", () => {
     expect(extractAnswer({})).toBeNull();
     expect(extractAnswer(null)).toBeNull();
+  });
+
+  it("reserves enough tokens for a reasoning model to answer", () => {
+    expect(MAX_RESPONSE_TOKENS).toBeGreaterThanOrEqual(2048);
+    expect(buildRequest("summarize", "Some text.").max_tokens).toBe(MAX_RESPONSE_TOKENS);
   });
 });

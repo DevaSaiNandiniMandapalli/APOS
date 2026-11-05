@@ -8,6 +8,8 @@ export const AI_TASKS: { id: AiTask; label: string; instruction: string }[] = [
 ];
 
 export const MAX_INPUT_CHARS = 12000;
+/** Sarvam 105B is a reasoning model: it spends tokens thinking before it answers. */
+export const MAX_RESPONSE_TOKENS = 2048;
 export const DEFAULT_MODEL = "sarvam-105b";
 
 export function validateAiInput(text: string): string | null {
@@ -29,7 +31,7 @@ export function buildRequest(task: AiTask, text: string, model = DEFAULT_MODEL) 
   return {
     model,
     temperature: 0.3,
-    max_tokens: 800,
+    max_tokens: MAX_RESPONSE_TOKENS,
     messages: buildMessages(task, text),
   };
 }
