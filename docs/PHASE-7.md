@@ -57,3 +57,12 @@ Also `poweredByHeader: false` (no `X-Powered-By`).
   needs nonce wiring and a worker/blob allowlist.
 - Enable GitHub secret scanning and branch protection for `master` in repo
   settings (server-side, not code).
+
+## CI activation note
+
+The GitHub login currently connected to this workspace has the `repo` and
+`gist` scopes but not `workflow`, so GitHub rejects creating
+`.github/workflows/ci.yml` (it answers 404). The exact workflow is preserved in
+`docs/ci-workflow.yml`. To activate it: either re-authorize GitHub with the
+`workflow` scope, or in the GitHub web UI add a file at
+`.github/workflows/ci.yml` by pasting that content, then delete the docs copy.
