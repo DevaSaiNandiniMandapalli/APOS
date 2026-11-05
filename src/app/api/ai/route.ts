@@ -44,7 +44,7 @@ export async function POST(request: Request) {
         "api-subscription-key": apiKey,
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(60000),
     });
 
     if (!response.ok) {
