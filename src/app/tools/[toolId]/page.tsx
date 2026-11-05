@@ -1,3 +1,4 @@
+import { createElement } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { toolDefinitions, studioById } from "@/lib/registry";
@@ -18,16 +19,14 @@ export default async function ToolPage({ params }: { params: Promise<{ toolId: s
   const tool = toolDefinitions.find((item) => item.id === toolId);
   if (!tool) notFound();
   const studio = studioById[tool.studioId];
-  const ToolIcon = iconFor(tool.icon);
-  const StudioIcon = iconFor(studio.icon);
   const label = tool.status === "in-development" ? "In Development" : tool.status[0].toUpperCase() + tool.status.slice(1);
   return <><RouteHeader title={tool.name}/><main className="content-wrap route-content">
     <div className="ambient" aria-hidden="true"><i/><i/><i/></div>
     <Link className="text-link" href={`/studios/${studio.id}`}><span aria-hidden="true">{"\u2190"}</span> {studio.name}</Link>
     <header className="route-hero">
-      <span className="route-hero-icon"><ToolIcon size={24}/><span className="hero-ring"/></span>
+      <span className="route-hero-icon">{createElement(iconFor(tool.icon), { size: 24 })}<span className="hero-ring"/></span>
       <div className="route-hero-copy">
-        <div className="eyebrow"><StudioIcon size={12}/> {studio.name.toUpperCase()}</div>
+        <div className="eyebrow">{createElement(iconFor(studio.icon), { size: 12 })} {studio.name.toUpperCase()}</div>
         <h1 className="hero-title">{tool.name}</h1>
         <p className="welcome-copy">{tool.description}</p>
       </div>

@@ -319,3 +319,16 @@ html[data-theme="dark"] .status-pill.status-available{color:#8fd3b2}
 .ambient{inset:14px 0 auto;height:380px}
 .ambient i{opacity:.1}
 :root[data-theme="dark"] .ambient i{opacity:.16}
+
+/* PDF repair / optimize report */
+.pdf-file-line{margin:10px 0 0;font-size:14px;color:var(--muted)}
+.pdf-options{margin:16px 0 0;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--surface-soft);display:grid;gap:9px}
+.pdf-options legend{padding:0 6px;font-size:12px;font-weight:700;letter-spacing:.6px;color:var(--muted);text-transform:uppercase}
+.pdf-options label{display:flex;align-items:flex-start;gap:9px;font-size:14px;line-height:1.45;color:var(--text)}
+.pdf-options input{margin-top:2px;accent-color:var(--purple)}
+.pdf-result{display:block}
+.pdf-report{display:grid;grid-template-columns:minmax(130px,auto) 1fr;gap:7px 16px;margin:14px 0 0;font-size:14px}
+.pdf-report dt{color:var(--muted);font-weight:600}
+.pdf-report dd{margin:0;color:var(--text);line-height:1.5}
+.pdf-note{margin:10px 0 0;font-size:13px;color:var(--muted);line-height:1.5}
+@media(max-width:760px){.pdf-report{grid-template-columns:1fr;gap:2px}.pdf-report dd{margin-bottom:8px}}

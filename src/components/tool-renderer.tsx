@@ -11,6 +11,8 @@ const SplitPdf = dynamic(() => import("@/components/split-pdf"), { ssr: false, l
 const RotatePdf = dynamic(() => import("@/components/rotate-pdf"), { ssr: false, loading });
 const OrganizePdf = dynamic(() => import("@/components/organize-pdf"), { ssr: false, loading });
 const CompressPdf = dynamic(() => import("@/components/compress-pdf"), { ssr: false, loading });
+const PdfRepair = dynamic(() => import("@/components/pdf-repair"), { ssr: false, loading });
+const PdfOptimize = dynamic(() => import("@/components/pdf-optimize"), { ssr: false, loading });
 const PdfToImages = dynamic(() => import("@/components/pdf-to-images"), { ssr: false, loading });
 const ImagesToPdf = dynamic(() => import("@/components/images-to-pdf"), { ssr: false, loading });
 const PdfMarking = dynamic(() => import("@/components/pdf-marking"), { ssr: false, loading });
@@ -39,6 +41,8 @@ const TOOLS: Record<string, ToolEntry> = {
   "split-pdf": { pill: "Available · processed on this device", render: () => <SplitPdf /> },
   "rotate-pdf": { pill: "Available · processed on this device", render: () => <RotatePdf /> },
   "compress-pdf": { pill: "Available · structural rewrite on this device", render: () => <CompressPdf /> },
+  "repair-pdf": { pill: "Available · structure rebuilt on this device", render: () => <PdfRepair /> },
+  "optimize-pdf": { pill: "Available · measured optimization on this device", render: () => <PdfOptimize /> },
   "pdf-to-images": { pill: "Available · processed on this device", render: () => <PdfToImages /> },
   "pdf-to-text": { pill: "Available · browser-local batch conversion", render: () => <PdfToText /> },
   "pdf-to-html": { pill: "Available · semantic text extraction on this device", render: () => <PdfToText outputFormat="html" /> },
