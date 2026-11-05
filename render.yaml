@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: apos
+    runtime: node
+    plan: free
+    region: oregon
+    branch: lemon/design-and-build
+    repo: https://github.com/DevaSaiNandiniMandapalli/APOS
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start -- -H 0.0.0.0 -p $PORT
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: SARVAM_API_KEY
+        sync: false
