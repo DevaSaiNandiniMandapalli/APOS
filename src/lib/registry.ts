@@ -66,13 +66,17 @@ export const toolDefinitions: readonly ToolDefinition[] = [
   { id: "pdf-watermark", name: "PDF Watermark", studioId: "pdf-essentials", description: "Add a text or image watermark to selected PDF pages.", status: "available", icon: "Stamp" },
   { id: "pdf-page-numbers", name: "PDF Page Numbers", studioId: "pdf-essentials", description: "Add page numbering to selected pages.", status: "available", icon: "ListOrdered" },
   { id: "image-converter", name: "Image converter", studioId: "image-studio", description: "Convert common image formats for your workflow.", status: "in-development", icon: "ImagePlus" },
+  { id: "ocr-image", name: "Image OCR", studioId: "ocr-scanning-studio", description: "Extract text from a scanned image in your browser.", status: "available", icon: "ScanText" },
   { id: "ocr-pdf", name: "OCR PDF", studioId: "ocr-scanning-studio", description: "Recognize text in scanned documents.", status: "planned", icon: "ScanLine" },
   { id: "document-editor", name: "Document editor", studioId: "document-studio", description: "Write and format rich-text documents in the browser.", status: "in-development", icon: "FileText" },
   { id: "document-to-pdf", name: "Document to PDF", studioId: "document-studio", description: "Create a PDF from a text document.", status: "planned", icon: "FileOutput" },
+  { id: "spreadsheet-editor", name: "Spreadsheet Editor", studioId: "spreadsheet-studio", description: "Build a sheet with formulas and export it as CSV, on this device.", status: "available", icon: "Sheet" },
+  { id: "presentation-editor", name: "Presentation Editor", studioId: "presentation-studio", description: "Build, present and export a slide deck as PDF, on this device.", status: "available", icon: "Presentation" },
   { id: "spreadsheet-to-pdf", name: "Spreadsheet to PDF", studioId: "spreadsheet-studio", description: "Prepare a spreadsheet as a PDF document.", status: "planned", icon: "Sheet" },
   { id: "presentation-to-pdf", name: "Presentation to PDF", studioId: "presentation-studio", description: "Export slides into a shareable PDF.", status: "planned", icon: "Presentation" },
+  { id: "ai-assistant", name: "AI assistant", studioId: "ai-studio", description: "Summarize, rewrite or explain text with Sarvam 105B (server-configured).", status: "available", icon: "WandSparkles" },
   { id: "document-summary", name: "Document summary", studioId: "ai-studio", description: "Get a concise summary of a document.", status: "planned", icon: "ListChecks" },
-  { id: "workflow-builder", name: "Workflow builder", studioId: "automation-studio", description: "Connect document steps into repeatable workflows.", status: "planned", icon: "Workflow" },
+  { id: "workflow-builder", name: "Workflow builder", studioId: "automation-studio", description: "Design and export repeatable document workflows.", status: "available", icon: "Workflow" },
   { id: "file-inspector", name: "File inspector", studioId: "utility-studio", description: "Review basic properties of a document file.", status: "planned", icon: "ScanSearch" },
   { id: "pdf-metadata", name: "PDF metadata", studioId: "developer-studio", description: "Inspect and edit supported standard PDF document-information fields.", status: "available", icon: "Braces" }
 ];

@@ -51,6 +51,9 @@ import {
   RichTextPlugin,
 } from "@lexical/react/LexicalRichTextPlugin";
 import {
+  ContentEditable,
+} from "@lexical/react/LexicalContentEditable";
+import {
   TablePlugin,
 } from "@lexical/react/LexicalTablePlugin";
 import {
@@ -291,7 +294,7 @@ function DocumentEditorPane({ onChange }: { onChange: (document: Document) => vo
       <HistoryPlugin />
       <RichTextPlugin
         contentEditable={
-          <div
+          <ContentEditable
             className="document-editor__pane"
             style={{
               minHeight: "55vh",
