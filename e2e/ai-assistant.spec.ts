@@ -11,6 +11,9 @@ test("validates empty input", async ({ page }) => {
 });
 
 test("reports clearly when the server has no AI key", async ({ page }) => {
+  await page.route("**/api/ai", (route) =>
+    route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "AI is not configured on this server. An administrator must set SARVAM_API_KEY." }) }),
+  );
   await page.getByLabel("Text to send").fill("APOS is a document workspace for everyday office work.");
   await page.locator("#ai-task").selectOption("summarize");
   await page.getByRole("button", { name: "Ask Sarvam 105B" }).click();

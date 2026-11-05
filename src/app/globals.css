@@ -189,3 +189,13 @@
 .office__row select{padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text)}
 .office__actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:14px 0}
 .office__file{color:var(--muted);overflow-wrap:anywhere}
+
+/* AI document agent */
+.agent__presets{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+.agent__presets button{padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--text);cursor:pointer}
+.agent__label{display:block;margin:10px 0 6px;font-weight:600}
+.agent textarea{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--text);font:inherit;resize:vertical}
+.agent__actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:14px 0}
+.agent__file{color:var(--muted);overflow-wrap:anywhere}
+.agent__result{margin-top:18px}
+.agent__preview{white-space:pre-wrap;max-height:320px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:15px;line-height:1.5}

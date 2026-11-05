@@ -1,4 +1,4 @@
-export type AiTask = "summarize" | "rewrite" | "explain" | "chat";
+export type AiTask = "summarize" | "rewrite" | "explain" | "chat" | "document";
 
 export const AI_TASKS: { id: AiTask; label: string; instruction: string }[] = [
   { id: "summarize", label: "Summarize", instruction: "Summarize the following text in a few clear sentences. Keep the key facts." },
@@ -8,6 +8,8 @@ export const AI_TASKS: { id: AiTask; label: string; instruction: string }[] = [
 ];
 
 export const MAX_INPUT_CHARS = 12000;
+export const MAX_INSTRUCTION_CHARS = 2000;
+export const MAX_DOCUMENT_TOKENS = 4096;
 /** Sarvam 105B is a reasoning model: it spends tokens thinking before it answers. */
 export const MAX_RESPONSE_TOKENS = 2048;
 export const DEFAULT_MODEL = "sarvam-105b";
@@ -52,5 +54,42 @@ export function extractAnswer(payload: unknown): string | null {
     if (typeof choice.message?.content === "string" && choice.message.content.trim()) return choice.message.content.trim();
     if (typeof choice.text === "string" && choice.text.trim()) return choice.text.trim();
   }
+  return null;
+}
+
+const DOCUMENT_SYSTEM_PROMPT = [
+  "You convert documents into new documents.",
+  "Reply with Markdown only, using this subset: '# ', '## ', '### ' headings, '- ' bullets,",
+  "'1. ' numbered lists, pipe tables ('| a | b |' with a '| --- | --- |' separator), and plain paragraphs.",
+  "Separate blocks with a blank line. Never add commentary, notes, explanations or code fences.",
+  "Reproduce every fact from the source. Never invent names, numbers, dates or clauses.",
+].join(" ");
+
+export function buildDocumentMessages(instructions: string, text: string) {
+  return [
+    { role: "system" as const, content: DOCUMENT_SYSTEM_PROMPT },
+    { role: "user" as const, content: `Instructions:\n${instructions.trim()}\n\nSource document:\n-----\n${text.trim()}` },
+  ];
+}
+
+export function buildDocumentRequest(instructions: string, text: string, model = DEFAULT_MODEL) {
+  return {
+    model,
+    temperature: 0.2,
+    max_tokens: MAX_DOCUMENT_TOKENS,
+    messages: buildDocumentMessages(instructions, text),
+  };
+}
+
+export function stripCodeFence(value: string): string {
+  const trimmed = value.trim();
+  const match = /^```[a-zA-Z]*\n([\s\S]*?)\n?```$/.exec(trimmed);
+  return match ? match[1].trim() : trimmed;
+}
+
+export function validateInstructions(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return "Describe what the new document should contain.";
+  if (trimmed.length > MAX_INSTRUCTION_CHARS) return `Instructions are too long (limit ${MAX_INSTRUCTION_CHARS} characters).`;
   return null;
 }

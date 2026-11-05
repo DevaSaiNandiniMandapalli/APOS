@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { buildRequest, extractAnswer, validateAiInput, type AiTask } from "@/lib/ai";
+import { buildDocumentRequest, buildRequest, extractAnswer, stripCodeFence, validateAiInput, validateInstructions, type AiTask } from "@/lib/ai";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TASKS: AiTask[] = ["summarize", "rewrite", "explain", "chat"];
+const TASKS: AiTask[] = ["summarize", "rewrite", "explain", "chat", "document"];
 
 export async function POST(request: Request) {
   const apiKey = process.env.SARVAM_API_KEY;
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { task, text } = (body ?? {}) as { task?: unknown; text?: unknown };
+  const { task, text, instructions } = (body ?? {}) as { task?: unknown; text?: unknown; instructions?: unknown };
   const resolvedTask: AiTask = TASKS.includes(task as AiTask) ? (task as AiTask) : "summarize";
   if (typeof text !== "string") {
     return NextResponse.json({ error: "Text is required." }, { status: 400 });
@@ -32,9 +32,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: inputError }, { status: 400 });
   }
 
+  const wantsDocument = task === "document";
+  if (wantsDocument) {
+    if (typeof instructions !== "string") {
+      return NextResponse.json({ error: "Instructions are required." }, { status: 400 });
+    }
+    const instructionError = validateInstructions(instructions);
+    if (instructionError) {
+      return NextResponse.json({ error: instructionError }, { status: 400 });
+    }
+  }
+
   const endpoint = process.env.SARVAM_API_URL ?? "https://api.sarvam.ai/v1/chat/completions";
   const model = process.env.SARVAM_MODEL ?? undefined;
-  const payload = buildRequest(resolvedTask, text, model);
+  const payload = wantsDocument
+    ? buildDocumentRequest(instructions as string, text, model)
+    : buildRequest(resolvedTask, text, model);
 
   try {
     const response = await fetch(endpoint, {
@@ -52,7 +65,7 @@ export async function POST(request: Request) {
     }
 
     const data: unknown = await response.json();
-    const answer = extractAnswer(data);
+    const answer = wantsDocument ? stripCodeFence(extractAnswer(data) ?? "") || null : extractAnswer(data);
     if (!answer) {
       return NextResponse.json({ error: "The AI returned an unexpected response." }, { status: 502 });
     }

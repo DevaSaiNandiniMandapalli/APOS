@@ -76,6 +76,7 @@ export const toolDefinitions: readonly ToolDefinition[] = [
   { id: "presentation-to-pdf", name: "Presentation to PDF", studioId: "presentation-studio", description: "Export slides as a text-faithful PDF.", status: "available", icon: "Presentation" },
   { id: "ai-assistant", name: "AI assistant", studioId: "ai-studio", description: "Summarize, rewrite or explain text with Sarvam 105B (server-configured).", status: "available", icon: "WandSparkles" },
   { id: "document-summary", name: "Document summary", studioId: "ai-studio", description: "Summarize a PDF, Word or text file with Sarvam 105B.", status: "available", icon: "ListChecks" },
+  { id: "ai-document-agent", name: "AI document agent", studioId: "ai-studio", description: "Turn a PDF or Word file into a new Word document that follows your instructions.", status: "available", icon: "Bot" },
   { id: "workflow-builder", name: "Workflow builder", studioId: "automation-studio", description: "Design and export repeatable document workflows.", status: "available", icon: "Workflow" },
   { id: "file-inspector", name: "File inspector", studioId: "utility-studio", description: "Review basic properties of a document file.", status: "available", icon: "ScanSearch" },
   { id: "pdf-metadata", name: "PDF metadata", studioId: "developer-studio", description: "Inspect and edit supported standard PDF document-information fields.", status: "available", icon: "Braces" }
