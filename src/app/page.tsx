@@ -68,6 +68,22 @@ export default function Home() {
 
         <section className="hero-card"><div className="hero-copy"><div className="hero-kicker"><span className="kicker-spark"><Sparkles size={13}/></span> A MORE THOUGHTFUL WORKSPACE</div><h2>Make room for<br/>your best work.</h2><p>Everything you need for documents, gathered in one calm, capable place.</p><button className="hero-cta" onClick={() => { setActiveStudio(null); setShowDirectory(true); }}>Browse tools <ArrowRight size={16}/></button></div><div className="hero-art" aria-hidden="true"><div className="art-orbit orbit-one"/><div className="art-orbit orbit-two"/><div className="art-glow"/><div className="art-sheet back-sheet"><div/><div/><div/></div><div className="art-sheet front-sheet"><div className="sheet-top"><span/><span/><span/></div><div className="sheet-title"/><div className="sheet-line wide"/><div className="sheet-line"/><div className="sheet-chart"><i/><i/><i/><i/><i/><i/></div><div className="sheet-line short"/></div><div className="floating-check"><Check size={15}/></div><div className="floating-spark"><Sparkles size={17}/></div></div><div className="hero-index"><span>01</span><i/> <span>15 STUDIOS</span></div></section>
 
+        <section className="ticker" aria-label="What APOS can do">
+          <div className="ticker-track">
+          {[0, 1].map((copy) => <div className="ticker-group" key={copy} aria-hidden={copy === 1 ? "true" : undefined}>
+            {[
+              ["38", "tools, one workspace"],
+              ["No uploads", "everything runs in your browser"],
+              ["PDF ↔ Word ↔ Excel", "real files, not screenshots"],
+              ["Sarvam 105B", "summaries and document drafting"],
+              ["OCR", "scans become text"],
+              ["Automations", "chain the steps you repeat"],
+              ["Honest badges", "we say when a tool is not ready"],
+            ].map(([title, copyText]) => <span className="ticker-item" key={title}><i/><strong>{title}</strong> {copyText}</span>)}
+          </div>)}
+          </div>
+        </section>
+
         <section className="section-heading"><div><div className="section-eyebrow">BUILT AROUND YOUR WORK</div><h2>Explore the studios</h2></div><Link className="text-link" href="/studios">View all studios <ArrowRight size={15}/></Link></section>
         <section className="studio-grid" aria-label="Product studios">{studioDefinitions.slice(0, 6).map((studio, index) => { const Icon = studioIcons[studio.id as keyof typeof studioIcons]; return <Link className={`studio-card accent-${studio.accent}`} key={studio.id} href={`/studios/${studio.id}`}><div className="studio-card-top"><span className="studio-icon"><Icon size={19}/></span><span className="studio-number">0{index + 1}</span></div><h3>{studio.name}</h3><p>{studio.description}</p><span className="card-arrow"><ArrowUpRight size={16}/></span></Link>; })}</section>
 

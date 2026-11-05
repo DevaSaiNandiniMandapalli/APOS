@@ -1225,6 +1225,9 @@ test("sidebar collapse preference persists across reloads", async ({ page }) => 
 });
 
 test("dashboard has no automated accessibility violations", async ({ page }) => {
+  // Audit the settled page: entrance animations fade content in, and axe would
+  // measure colours mid-transition. Reduced motion is the state that never animates.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
   const lightResults = await new AxeBuilder({ page }).analyze();
   expect(lightResults.violations).toEqual([]);

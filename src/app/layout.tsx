@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import MotionLayer from "@/components/motion-layer";
 
 export const metadata: Metadata = {
   title: "APOS — Work, thoughtfully organized",
@@ -17,7 +18,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body><MotionLayer />{children}</body>
     </html>
   );
 }
