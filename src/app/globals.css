@@ -265,3 +265,57 @@ html[data-scrolled="true"] .topbar{box-shadow:0 6px 20px rgba(24,20,50,.06)}
 @keyframes page-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes ticker-slide{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 @media(max-width:760px){.ticker{margin-top:18px}.ticker-track{gap:26px}.ticker-group{gap:26px}}
+
+/* ---- Interior pages: ambience, moving borders, animated headers ---- */
+@property --border-angle{syntax:"<angle>";inherits:false;initial-value:0deg}
+.route-content{position:relative}
+.ambient{position:absolute;inset:-30px 0 auto;height:420px;overflow:hidden;pointer-events:none;z-index:0;border-radius:20px}
+.ambient i{position:absolute;border-radius:50%;filter:blur(64px);opacity:.14}
+.ambient i:nth-child(1){width:250px;height:250px;left:-50px;top:-70px;background:#e5322d;animation:orb-drift 19s ease-in-out infinite}
+.ambient i:nth-child(2){width:210px;height:210px;right:6%;top:-40px;background:#ff9a6c;animation:orb-drift 23s ease-in-out infinite reverse}
+.ambient i:nth-child(3){width:170px;height:170px;left:44%;top:120px;background:#d42924;opacity:.07;animation:orb-drift 27s ease-in-out infinite}
+:root[data-theme="dark"] .ambient i{opacity:.2}
+.route-content>*:not(.ambient){position:relative;z-index:1}
+.route-hero{display:flex;align-items:center;gap:18px;margin:20px 0 8px;padding:20px 22px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(120deg,var(--surface),var(--surface-soft));overflow:hidden;--gx:50%;--gy:50%}
+.route-hero::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(260px 200px at var(--gx) var(--gy),color-mix(in srgb,var(--purple) 9%,transparent),transparent 70%);transition:background .2s ease-out}
+.route-hero-copy{flex:1;min-width:0}
+.route-hero h1{margin:8px 0 5px}
+.route-hero-icon{position:relative;flex:0 0 auto;width:56px;height:56px;border-radius:16px;display:grid;place-items:center;color:#fff;background:linear-gradient(145deg,#f0554e,#c11f1b);box-shadow:0 10px 24px rgba(196,38,33,.28);animation:icon-breathe 6s ease-in-out infinite}
+.hero-ring{position:absolute;inset:-7px;border-radius:22px;border:1px solid color-mix(in srgb,var(--purple) 38%,transparent);animation:ring-pulse 3.4s ease-out infinite;pointer-events:none}
+.route-hero-badge{flex:0 0 auto;padding:9px 13px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:13px}
+.route-hero-badge b{color:var(--text)}
+.hero-title{background:linear-gradient(94deg,var(--text) 24%,#e5322d 46%,#ff8a5c 54%,var(--text) 76%);background-size:230% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:title-sheen 10s ease-in-out infinite}
+html:not([data-motion="on"]) .hero-title{color:var(--text);background:none;-webkit-text-fill-color:currentColor}
+.status-pill.status-available{color:#4f8a6c}
+.status-pill.status-available i{background:#72b79a;box-shadow:0 0 0 0 rgba(114,183,154,.5);animation:pill-ping 2.6s ease-out infinite}
+.status-pill.status-planned i{background:#c9a227}
+.status-pill.status-in-development i{background:#6b8fd4}
+html[data-theme="dark"] .status-pill.status-available{color:#8fd3b2}
+.tool-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
+.tool-index{font-size:11px;letter-spacing:1px;color:var(--muted);font-variant-numeric:tabular-nums}
+.moving-border{position:relative;isolation:isolate}
+.moving-border::before{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1.5px;background:conic-gradient(from var(--border-angle),transparent 0turn,color-mix(in srgb,var(--purple) 85%,transparent) .62turn,#ff8a5c .72turn,transparent .86turn,transparent 1turn);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:border-spin 7s linear infinite;opacity:.5;pointer-events:none;transition:opacity .3s ease}
+.moving-border:hover::before,.moving-border:focus-within::before{opacity:1}
+.tool-panel{margin-top:18px;padding:22px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.tool-panel h2{font-family:'Inter',sans-serif;font-size:21px;margin:0 0 8px}
+.how{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:22px}
+.how-step{display:flex;gap:11px;padding:13px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);transition:transform .22s ease,box-shadow .22s ease}
+.how-step:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.how-dot{flex:0 0 auto;width:23px;height:23px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff;background:linear-gradient(145deg,#f0554e,#c11f1b)}
+.how-step strong{display:block;font-size:13px;margin-bottom:3px}
+.how-step p{margin:0;font-size:12px;line-height:1.5;color:var(--muted)}
+@keyframes border-spin{to{--border-angle:360deg}}
+@keyframes orb-drift{0%,100%{transform:translate3d(0,0,0) scale(1)}33%{transform:translate3d(28px,18px,0) scale(1.06)}66%{transform:translate3d(-18px,26px,0) scale(.96)}}
+@keyframes icon-breathe{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes ring-pulse{0%{transform:scale(.94);opacity:.9}70%{transform:scale(1.16);opacity:0}100%{opacity:0}}
+@keyframes title-sheen{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+@keyframes pill-ping{0%{box-shadow:0 0 0 0 rgba(114,183,154,.55)}70%{box-shadow:0 0 0 6px rgba(114,183,154,0)}100%{box-shadow:0 0 0 0 rgba(114,183,154,0)}}
+@media(max-width:760px){.route-hero{flex-wrap:wrap;padding:16px;gap:14px}.route-hero-icon{width:46px;height:46px;border-radius:13px}.route-hero-badge{order:3}.how{grid-template-columns:1fr}.tool-panel{padding:16px}}
+@media(prefers-reduced-motion:reduce){.moving-border::before,.ambient i,.route-hero-icon,.hero-ring,.hero-title,.status-pill i{animation:none!important}.hero-title{color:var(--text);background:none;-webkit-text-fill-color:currentColor}}
+
+/* Accessibility: keep link and crumb contrast safe over the ambient tint */
+.route-content .text-link{color:#b41f1b;font-weight:600}
+:root[data-theme="dark"] .route-content .text-link{color:#ff908b}
+.ambient{inset:14px 0 auto;height:380px}
+.ambient i{opacity:.1}
+:root[data-theme="dark"] .ambient i{opacity:.16}

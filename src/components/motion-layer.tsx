@@ -12,6 +12,11 @@ const REVEAL_SELECTORS = [
   ".welcome-row",
   ".hero-card",
   ".footer",
+  ".route-hero",
+  ".tool-panel",
+  ".how-step",
+  ".planned-panel",
+  ".merge-panel",
 ];
 
 export default function MotionLayer() {
@@ -62,6 +67,19 @@ export default function MotionLayer() {
         hero.removeEventListener("pointermove", move);
         hero.removeEventListener("pointerleave", leave);
       });
+    }
+
+    const glowTargets = Array.from(document.querySelectorAll<HTMLElement>(".route-hero, .tool-panel"));
+    const glow = (event: PointerEvent) => {
+      const surface = (event.target as HTMLElement | null)?.closest<HTMLElement>(".route-hero, .tool-panel");
+      if (!surface) return;
+      const rect = surface.getBoundingClientRect();
+      surface.style.setProperty("--gx", `${(((event.clientX - rect.left) / rect.width) * 100).toFixed(1)}%`);
+      surface.style.setProperty("--gy", `${(((event.clientY - rect.top) / rect.height) * 100).toFixed(1)}%`);
+    };
+    if (glowTargets.length) {
+      document.addEventListener("pointermove", glow, { passive: true });
+      cleanup.push(() => document.removeEventListener("pointermove", glow));
     }
 
     let frame = 0;
