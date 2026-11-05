@@ -170,3 +170,11 @@
   }
   .top-actions { flex: 0 0 auto; margin-left: 0; gap: 8px; }
 }
+
+/* File inspector */
+.inspector__grid{display:grid;gap:8px;margin:16px 0 0;padding:0}
+.inspector__row{display:grid;grid-template-columns:minmax(120px,190px) minmax(0,1fr);gap:14px;align-items:start;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.inspector__label{margin:0;color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.inspector__value{margin:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.inspector__notes{margin:12px 0 0;padding-left:18px;color:var(--muted);font-size:13px;display:grid;gap:4px}
+@media (max-width:760px){.inspector__row{grid-template-columns:1fr;gap:4px}}

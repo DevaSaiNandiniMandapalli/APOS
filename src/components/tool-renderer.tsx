@@ -25,6 +25,7 @@ const PresentationStudio = dynamic(() => import("@/components/presentation-studi
 const AiAssistant = dynamic(() => import("@/components/ai-assistant"), { ssr: false, loading });
 const OcrTool = dynamic(() => import("@/components/ocr-tool"), { ssr: false, loading });
 const WorkflowBuilder = dynamic(() => import("@/components/workflow-builder"), { ssr: false, loading });
+const FileInspector = dynamic(() => import("@/components/file-inspector"), { ssr: false, loading });
 
 type ToolEntry = { pill?: string; render: () => ReactNode };
 
@@ -54,6 +55,7 @@ const TOOLS: Record<string, ToolEntry> = {
   "ai-assistant": { pill: "Available · server-configured Sarvam 105B", render: () => <AiAssistant /> },
   "ocr-image": { pill: "Available · browser-local OCR", render: () => <OcrTool /> },
   "workflow-builder": { pill: "Available · browser-local workflow design", render: () => <WorkflowBuilder /> },
+  "file-inspector": { pill: "Available · browser-local file analysis", render: () => <FileInspector /> },
 };
 
 class ToolErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
