@@ -26,6 +26,8 @@ const AiAssistant = dynamic(() => import("@/components/ai-assistant"), { ssr: fa
 const OcrTool = dynamic(() => import("@/components/ocr-tool"), { ssr: false, loading });
 const WorkflowBuilder = dynamic(() => import("@/components/workflow-builder"), { ssr: false, loading });
 const FileInspector = dynamic(() => import("@/components/file-inspector"), { ssr: false, loading });
+const DocumentSummary = dynamic(() => import("@/components/document-summary"), { ssr: false, loading });
+const OcrPdf = dynamic(() => import("@/components/ocr-pdf"), { ssr: false, loading });
 
 type ToolEntry = { pill?: string; render: () => ReactNode };
 
@@ -56,6 +58,8 @@ const TOOLS: Record<string, ToolEntry> = {
   "ocr-image": { pill: "Available · browser-local OCR", render: () => <OcrTool /> },
   "workflow-builder": { pill: "Available · browser-local workflow design", render: () => <WorkflowBuilder /> },
   "file-inspector": { pill: "Available · browser-local file analysis", render: () => <FileInspector /> },
+  "document-summary": { pill: "Available · Sarvam 105B document summary", render: () => <DocumentSummary /> },
+  "ocr-pdf": { pill: "Available · browser-local OCR for scanned PDFs", render: () => <OcrPdf /> },
 };
 
 class ToolErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {

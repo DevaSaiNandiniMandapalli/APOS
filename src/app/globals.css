@@ -178,3 +178,8 @@
 .inspector__value{margin:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 .inspector__notes{margin:12px 0 0;padding-left:18px;color:var(--muted);font-size:13px;display:grid;gap:4px}
 @media (max-width:760px){.inspector__row{grid-template-columns:1fr;gap:4px}}
+
+/* Document summary + PDF OCR */
+.ai__controls input[type="text"]{min-width:0;flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text)}
+.ocr__controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:12px 0}
+.ocr__controls input[type="text"]{flex:1;min-width:140px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text)}
