@@ -30,6 +30,7 @@ const DocumentSummary = dynamic(() => import("@/components/document-summary"), {
 const OcrPdf = dynamic(() => import("@/components/ocr-pdf"), { ssr: false, loading });
 const OfficeConvert = dynamic(() => import("@/components/office-convert"), { ssr: false, loading });
 const AiDocumentAgent = dynamic(() => import("@/components/ai-document-agent"), { ssr: false, loading });
+const UniversalConvert = dynamic(() => import("@/components/universal-convert"), { ssr: false, loading });
 
 type ToolEntry = { pill?: string; render: () => ReactNode };
 
@@ -67,6 +68,7 @@ const TOOLS: Record<string, ToolEntry> = {
   "spreadsheet-to-pdf": { pill: "Available · paginated PDF table", render: () => <OfficeConvert mode="spreadsheet-to-pdf" /> },
   "presentation-to-pdf": { pill: "Available · text-faithful slide export", render: () => <OfficeConvert mode="presentation-to-pdf" /> },
   "ai-document-agent": { pill: "Available · instruction-driven Word output", render: () => <AiDocumentAgent /> },
+  "universal-converter": { pill: "Available · one box, every supported conversion", render: () => <UniversalConvert /> },
 };
 
 class ToolErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {

@@ -199,3 +199,12 @@
 .agent__file{color:var(--muted);overflow-wrap:anywhere}
 .agent__result{margin-top:18px}
 .agent__preview{white-space:pre-wrap;max-height:320px;overflow:auto;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:15px;line-height:1.5}
+
+/* Universal converter */
+.univ__label{display:block;margin:12px 0 6px;font-weight:600}
+.univ__input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--text);font:inherit}
+.univ__examples{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.univ__examples button{padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--text);cursor:pointer}
+.univ__plan{margin:10px 0;color:var(--muted)}
+.univ__actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:14px 0}
+.univ__file{color:var(--muted);overflow-wrap:anywhere}
