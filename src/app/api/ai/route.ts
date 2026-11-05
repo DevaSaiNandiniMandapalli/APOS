@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     ? buildDocumentRequest(instructions as string, text, model)
     : buildRequest(resolvedTask, text, model);
 
-  try {
+  const ask = async (): Promise<string | null> => {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
@@ -57,20 +57,32 @@ export async function POST(request: Request) {
         "api-subscription-key": apiKey,
       },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(60000),
+      signal: AbortSignal.timeout(120000),
     });
 
     if (!response.ok) {
-      return NextResponse.json({ error: `AI request failed (${response.status}).` }, { status: 502 });
+      throw new Error(`AI request failed (${response.status}).`);
     }
 
     const data: unknown = await response.json();
-    const answer = wantsDocument ? stripCodeFence(extractAnswer(data) ?? "") || null : extractAnswer(data);
+    const raw = extractAnswer(data);
+    return wantsDocument ? stripCodeFence(raw ?? "") || null : raw;
+  };
+
+  try {
+    let answer = await ask();
+    // The reasoning model sometimes spends its whole budget thinking and returns
+    // nothing; one retry recovers most of those runs.
+    if (!answer) answer = await ask();
     if (!answer) {
-      return NextResponse.json({ error: "The AI returned an unexpected response." }, { status: 502 });
+      return NextResponse.json(
+        { error: "The AI spent its whole budget thinking and returned no text. Try again, or shorten the document." },
+        { status: 502 },
+      );
     }
     return NextResponse.json({ answer }, { headers: { "Cache-Control": "no-store" } });
-  } catch {
-    return NextResponse.json({ error: "Could not reach the AI service. Try again." }, { status: 502 });
+  } catch (reason) {
+    const message = reason instanceof Error && reason.message.startsWith("AI request failed") ? reason.message : "Could not reach the AI service. Try again.";
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }

@@ -9,9 +9,13 @@ export const AI_TASKS: { id: AiTask; label: string; instruction: string }[] = [
 
 export const MAX_INPUT_CHARS = 12000;
 export const MAX_INSTRUCTION_CHARS = 2000;
-export const MAX_DOCUMENT_TOKENS = 4096;
-/** Sarvam 105B is a reasoning model: it spends tokens thinking before it answers. */
-export const MAX_RESPONSE_TOKENS = 2048;
+export const MAX_DOCUMENT_TOKENS = 8192;
+/**
+ * Sarvam 105B is a reasoning model: it spends most of its budget thinking before
+ * it writes the answer. Measured runs used ~2000 reasoning tokens for a short
+ * summary, so the budget has to cover thinking and output together.
+ */
+export const MAX_RESPONSE_TOKENS = 8192;
 export const DEFAULT_MODEL = "sarvam-105b";
 
 export function validateAiInput(text: string): string | null {
