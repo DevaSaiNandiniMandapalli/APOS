@@ -38,7 +38,7 @@
     "@opennextjs/cloudflare": "^1.20.16",
     "@playwright/test": "^1.56.1",
     "@tailwindcss/postcss": "^4.0.0",
-    "@types/node": "^22.10.5",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.0.3",
     "@types/react-dom": "^19.0.2",
     "eslint": "^9.39.0",
