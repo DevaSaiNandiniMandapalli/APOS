@@ -29,3 +29,8 @@ apos-sarvam.ps1
 sarvam_agent.py
 *.backup
 *.before-tiff
+
+# Cloudflare Workers build output
+.open-next/
+.wrangler/
+.dev.vars
