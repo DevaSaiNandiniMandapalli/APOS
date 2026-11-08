@@ -14,7 +14,6 @@ const REVEAL_SELECTORS = [
   ".footer",
   ".route-hero",
   ".tool-panel",
-  ".how-step",
   ".planned-panel",
   ".merge-panel",
 ];
