@@ -9,10 +9,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "lint": "eslint src",
-    "cf:build": "opennextjs-cloudflare build",
-    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy"
+    "lint": "eslint src worker",
+    "cf:build": "next build",
+    "cf:preview": "wrangler dev",
+    "cf:deploy": "next build && wrangler deploy",
+    "serve:static": "node scripts/serve-static.mjs"
   },
   "dependencies": {
     "@cantoo/pdf-lib": "^2.11.1",

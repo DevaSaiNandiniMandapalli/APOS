@@ -34,3 +34,5 @@ sarvam_agent.py
 .open-next/
 .wrangler/
 .dev.vars
+out/
+playwright.live.config.ts
