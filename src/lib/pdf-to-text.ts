@@ -1,5 +1,4 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
-import { renderPdfPicturePages } from "./pdf-page-images";
 import { PDF_LIMITS, checkPdfHeader } from "./pdf-limits";
 import { CONVERSION_LIMITS, validatePlainTextOutput } from "./conversion-engine";
 
@@ -8,7 +7,7 @@ export type PdfTextPage = Awaited<ReturnType<PDFDocumentProxy["getPage"]>>;
 export type PdfTextItem = { str: string; hasEOL?: boolean } | { type: string };
 export type PdfTextProgress = { completedPages: number; totalPages: number };
 
-export type PdfTextSettings = { includePageLabels: boolean };
+export type PdfTextSettings = { includePageLabels: boolean; title?: string };
 
 export async function extractPdfDocumentText(
   document: PdfTextDocument,
@@ -82,14 +81,37 @@ export async function convertPdfFileToHtml(
   signal: AbortSignal,
   onProgress: (progress: PdfTextProgress) => void,
 ) {
-  const textResult = await convertPdfFileToText(file, settings, signal, onProgress);
+  if (!file.size) throw new Error("The selected file is empty.");
+  if (file.size > CONVERSION_LIMITS.inputFileBytes) throw new Error("PDF to HTML accepts files up to 25 MB each.");
+  let input: Uint8Array | null = null;
+  let loadingTask: PDFDocumentLoadingTask | null = null;
+  let abortHandler: (() => void) | null = null;
   try {
-    const text = new TextDecoder("utf-8", { fatal: true }).decode(textResult.bytes);
-    const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const pictures = await renderPdfPicturePages(file as File, { signal, scale: 1.5 });
-    const imageMarkup = pictures.pages.map((picture) => `<figure><img src="${picture.dataUrl}" alt="Page ${picture.page} of the original document" width="${picture.width}" height="${picture.height}"><figcaption>Page ${picture.page}</figcaption></figure>`).join("");
-    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PDF text extraction</title><style>body{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.6 system-ui,sans-serif;color:#20212b}pre{white-space:pre-wrap;overflow-wrap:anywhere}figure{margin:1.5rem 0}img{max-width:100%;height:auto;border:1px solid #d8dae5;border-radius:6px}figcaption{color:#5b5f74;font-size:13px}</style></head><body><main><pre>${escaped}</pre>${imageMarkup ? `<section aria-label="Page pictures"><h2>Page pictures</h2>${imageMarkup}</section>` : ""}</main></body></html>`;
+    const buffer = await file.arrayBuffer();
+    if (signal.aborted) { new Uint8Array(buffer).fill(0); throw new DOMException("Conversion cancelled", "AbortError"); }
+    input = new Uint8Array(buffer);
+    if (!checkPdfHeader(input.subarray(0, 1024))) throw new Error("The selected file does not have a PDF signature.");
+    const pdfjs = await import("pdfjs-dist");
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+    loadingTask = pdfjs.getDocument({ data: input });
+    abortHandler = () => { if (loadingTask) void loadingTask.destroy(); };
+    signal.addEventListener("abort", abortHandler, { once: true });
+    let document: PDFDocumentProxy;
+    try { document = await loadingTask.promise; }
+    catch { if (signal.aborted) throw new DOMException("Conversion cancelled", "AbortError"); throw new Error("The PDF could not be opened. It may be corrupt, encrypted, or unsupported."); }
+    if (document.numPages < 1 || document.numPages > PDF_LIMITS.pages) throw new Error(`PDF files must contain 1-${PDF_LIMITS.pages} pages.`);
+    const { extractPdfHtmlPages, buildPdfHtml } = await import("./pdf-html");
+    const extracted = await extractPdfHtmlPages(document, {
+      signal,
+      onProgress: (completedPages, totalPages) => onProgress({ completedPages, totalPages }),
+    });
+    const html = buildPdfHtml(settings.title ?? "PDF reading view", extracted.pages);
     const bytes = new TextEncoder().encode(html);
-    return { bytes, pageCount: textResult.pageCount, characterCount: textResult.characterCount };
-  } finally { textResult.bytes.fill(0); }
+    const characterCount = extracted.pages.reduce((total, page) => total + page.blocks.reduce((sum, block) => sum + (block.kind === "text" ? block.text.length : 0), 0), 0);
+    return { bytes, pageCount: extracted.totalPages, characterCount };
+  } finally {
+    if (abortHandler) signal.removeEventListener("abort", abortHandler);
+    if (input?.byteLength) input.fill(0);
+    if (loadingTask) { try { await loadingTask.destroy(); } catch { /* PDF.js may already have destroyed a cancelled task. */ } }
+  }
 }

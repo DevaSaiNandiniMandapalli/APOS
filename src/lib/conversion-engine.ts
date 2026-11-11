@@ -150,7 +150,7 @@ export function validateHtmlOutput(bytes: Uint8Array) {
   let html: string;
   try { html = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
   catch { throw new Error("The generated HTML did not pass UTF-8 output validation."); }
-  if (!/^<!doctype html><html lang="en">[\s\S]*<main><pre>[\s\S]*<\/pre>[\s\S]*<\/main><\/body><\/html>$/i.test(html) || /<script\b|\son\w+\s*=/i.test(html)) throw new Error("The generated HTML did not pass document structure validation.");
+  if (!/^<!doctype html><html lang="en">[\s\S]*<main>[\s\S]*<\/main>[\s\S]*<\/body><\/html>$/i.test(html) || /<script\b|<iframe\b|\son\w+\s*=|javascript:/i.test(html)) throw new Error("The generated HTML did not pass document structure validation.");
 }
 
 export function safeOutputFilename(inputName: string, requestedBase: string, extension: string, occupied: Set<string>) {

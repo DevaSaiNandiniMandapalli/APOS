@@ -61,7 +61,7 @@ export const toolDefinitions: readonly ToolDefinition[] = [
   { id: "optimize-pdf", name: "Optimize PDF", studioId: "pdf-repair-optimization", description: "Rewrite PDF structure with optional clean-ups and a measured size report.", status: "available", icon: "Sparkles" },
   { id: "pdf-to-images", name: "PDF to Images", studioId: "pdf-conversion", description: "Render selected PDF pages as validated PNG or JPG images.", status: "available", icon: "Images" },
   { id: "pdf-to-text", name: "PDF to Text", studioId: "pdf-conversion", description: "Extract selectable PDF text into UTF-8 plain text files.", status: "available", icon: "FileOutput" },
-  { id: "pdf-to-html", name: "PDF to HTML", studioId: "pdf-conversion", description: "Extract PDF text into a safe, self-contained HTML reading view.", status: "available", icon: "FileOutput" },
+  { id: "pdf-to-html", name: "PDF to HTML", studioId: "pdf-conversion", description: "Turn a PDF into a safe, self-contained HTML reading view with its text and pictures in place.", status: "available", icon: "FileOutput" },
   { id: "images-to-pdf", name: "Images to PDF", studioId: "pdf-conversion", description: "Combine selected JPG and PNG images into a PDF.", status: "available", icon: "FileImage" },
   { id: "pdf-watermark", name: "PDF Watermark", studioId: "pdf-essentials", description: "Add a text or image watermark to selected PDF pages.", status: "available", icon: "Stamp" },
   { id: "pdf-page-numbers", name: "PDF Page Numbers", studioId: "pdf-essentials", description: "Add page numbering to selected pages.", status: "available", icon: "ListOrdered" },
