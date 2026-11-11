@@ -488,6 +488,39 @@ async function drawAnnotation(
     return;
   }
 
+  if (annotation.kind === "text-edit") {
+    if (!font) {
+      throw new PdfExportError("output", "The text font could not be embedded.");
+    }
+
+    const display = getDisplaySize(geometry);
+    const rect = visualRectToPdf(geometry, bounds);
+    page.drawRectangle({ ...rect, color: PDF_WHITE, opacity: 1 });
+
+    if (!annotation.text.trim()) return;
+
+    assertTextEncodable(annotation.text);
+
+    const fontSize = Math.max(1, annotation.fontSize * display.height);
+    const padding = Math.min(TEXT_PADDING, (annotation.width * display.width) / 4);
+    const anchorPoint = visualPointToPdf(geometry, {
+      x: annotation.x + padding / display.width,
+      y: annotation.y + (padding + fontSize * TEXT_ASCENT) / display.height,
+    });
+
+    page.drawText(annotation.text, {
+      x: anchorPoint.x,
+      y: anchorPoint.y,
+      size: fontSize,
+      font,
+      color: parseHexColor(annotation.color),
+      rotate: degrees(geometry.rotation),
+      lineHeight: fontSize * 1.2,
+      maxWidth: Math.max(1, annotation.width * display.width - padding * 2),
+    });
+    return;
+  }
+
   if (annotation.kind === "image") {
     let image = imageCache.get(annotation.src) ?? null;
 

@@ -12,7 +12,7 @@ import {
 describe("workflow model", () => {
   it("adds and removes steps", () => {
     let wf = createWorkflow();
-    expect(validateWorkflow(wf)).toContain("Add at least one step.");
+    expect(validateWorkflow(wf)).toContain("Add at least one step. Pick a tool from the palette, then save.");
     wf = addStep(wf, "merge");
     wf = addStep(wf, "compress");
     expect(wf.steps.map((s) => s.type)).toEqual(["merge", "compress"]);

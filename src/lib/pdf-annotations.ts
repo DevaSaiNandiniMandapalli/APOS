@@ -8,6 +8,7 @@ export const ANNOTATION_TOOLS = [
   "line",
   "arrow",
   "text-box",
+  "text-edit",
   "image",
 ] as const;
 
@@ -52,6 +53,14 @@ export type TextBoxAnnotation = AnnotationBase &
     text: string;
   };
 
+/** Covers the original text with white and types the replacement in its place. */
+export type TextEditAnnotation = AnnotationBase &
+  AnnotationBounds &
+  TextAnnotationStyle & {
+    kind: "text-edit";
+    text: string;
+  };
+
 export type ImageOverlayAnnotation = AnnotationBase &
   AnnotationBounds & {
     kind: "image";
@@ -73,6 +82,7 @@ export type LineAnnotation = AnnotationBase & {
 export type PdfAnnotation =
   | BoxAnnotation
   | TextBoxAnnotation
+  | TextEditAnnotation
   | ImageOverlayAnnotation
   | FreehandAnnotation
   | LineAnnotation;
@@ -104,6 +114,7 @@ export const ANNOTATION_TOOL_LABELS: Record<AnnotationTool, string> = {
   line: "Line",
   arrow: "Arrow",
   "text-box": "Text box",
+  "text-edit": "Replace text",
   image: "Image overlay",
 };
 
@@ -227,7 +238,7 @@ export function createDraftAnnotation(
   return {
     ...base,
     ...boxFromPoints(start, current),
-    ...(tool === "text-box"
+    ...(tool === "text-box" || tool === "text-edit"
       ? { kind: tool, text, ...textStyle }
       : tool === "image"
         ? { kind: tool, ...image }
@@ -289,6 +300,7 @@ export function isMeaningfulAnnotation(annotation: PdfAnnotation): boolean {
   }
 
   if (annotation.kind === "text-box" && !annotation.text.trim()) return false;
+  if (annotation.kind === "text-edit") return annotation.width > 0.003 && annotation.height > 0.001;
   if (annotation.kind === "image" && !isImageOverlaySource(annotation.src)) return false;
   return annotation.width > 0.003 && annotation.height > 0.003;
 }

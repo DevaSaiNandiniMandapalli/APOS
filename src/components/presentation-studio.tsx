@@ -162,6 +162,31 @@ export default function PresentationStudio() {
     setNotice("Saved deck JSON");
   };
 
+  const openPptx = async (file: File) => {
+    try {
+      const [{ readPptxSlides }, { newSlide }] = await Promise.all([
+        import("@/lib/office-formats"),
+        import("@/lib/presentation"),
+      ]);
+      const slides = readPptxSlides(new Uint8Array(await file.arrayBuffer()));
+      if (!slides.length) { setNotice("That .pptx file has no readable slides."); return; }
+      const next = {
+        ...deck,
+        title: file.name.replace(/\.[^.]+$/, "") || deck.title,
+        slides: slides.map((lines, index) => newSlide({
+          title: lines[0]?.slice(0, 120) ?? `Slide ${index + 1}`,
+          body: lines.slice(1).join("\n"),
+          layout: index === 0 && lines.length === 1 ? "title" : "title-body",
+        })),
+      };
+      setDeck(next);
+      setSelectedId(next.slides[0].id);
+      setNotice(`Opened ${file.name} — ${next.slides.length} slide(s). Edit any text, then export PDF.`);
+    } catch (reason) {
+      setNotice(reason instanceof Error ? reason.message : "That .pptx file could not be opened.");
+    }
+  };
+
   const openJson = async (file: File) => {
     const parsed = parseDeck(await file.text());
     if ("error" in parsed) {
@@ -188,16 +213,16 @@ export default function PresentationStudio() {
         <button type="button" onClick={() => setPresenting(deck.slides.findIndex((slide) => slide.id === selected.id))}>Present</button>
         <button type="button" onClick={() => void exportPdf()}>Export PDF</button>
         <button type="button" onClick={saveJson}>Save JSON</button>
-        <button type="button" onClick={() => fileRef.current?.click()}>Open JSON</button>
+        <button type="button" onClick={() => fileRef.current?.click()}>Open PPTX or JSON</button>
         <input
           ref={fileRef}
           type="file"
-          accept=".json,application/json"
+          accept=".json,.pptx,application/json,application/vnd.openxmlformats-officedocument.presentationml.presentation"
           className="deck__file"
-          aria-label="Open presentation JSON"
+          aria-label="Open a presentation JSON or PowerPoint file"
           onChange={(event) => {
             const file = event.target.files?.[0];
-            if (file) void openJson(file);
+            if (file) { if (/\.pptx$/i.test(file.name)) void openPptx(file); else void openJson(file); }
             event.target.value = "";
           }}
         />

@@ -33,6 +33,9 @@ const OcrPdf = dynamic(() => import("@/components/ocr-pdf"), { ssr: false, loadi
 const OfficeConvert = dynamic(() => import("@/components/office-convert"), { ssr: false, loading });
 const AiDocumentAgent = dynamic(() => import("@/components/ai-document-agent"), { ssr: false, loading });
 const UniversalConvert = dynamic(() => import("@/components/universal-convert"), { ssr: false, loading });
+const SignPdf = dynamic(() => import("@/components/sign-pdf"), { ssr: false, loading });
+const RedactPdf = dynamic(() => import("@/components/redact-pdf"), { ssr: false, loading });
+const UnlockPdf = dynamic(() => import("@/components/unlock-pdf"), { ssr: false, loading });
 
 type ToolEntry = { pill?: string; render: () => ReactNode };
 
@@ -56,9 +59,12 @@ const TOOLS: Record<string, ToolEntry> = {
   "extract-pdf-pages": { pill: "Available · processed on this device", render: () => <OrganizePdf operation="extract" /> },
   "duplicate-pdf-pages": { pill: "Available · processed on this device", render: () => <OrganizePdf operation="duplicate" /> },
   "add-blank-pdf-pages": { pill: "Available · processed on this device", render: () => <OrganizePdf operation="add-blank" /> },
-  "image-converter": { pill: "In Development · browser-local image conversion", render: () => <ImageConverter /> },
-  "edit-pdf": { pill: "In Development · PDF viewer", render: () => <PdfViewer /> },
-  "document-editor": { pill: "In Development · browser-local rich-text editor", render: () => <DocumentEditor /> },
+  "sign-pdf": { pill: "Available · visual signature on this device", render: () => <SignPdf /> },
+  "redact-pdf": { pill: "Available · content burned out on this device", render: () => <RedactPdf /> },
+  "unlock-pdf": { pill: "Available · password removed on this device", render: () => <UnlockPdf /> },
+  "image-converter": { pill: "Available · browser-local image conversion", render: () => <ImageConverter /> },
+  "edit-pdf": { pill: "Available · text editing in the browser", render: () => <PdfViewer /> },
+  "document-editor": { pill: "Available · browser-local rich-text editor", render: () => <DocumentEditor /> },
   "spreadsheet-editor": { pill: "Available · browser-local formulas and CSV", render: () => <SpreadsheetStudio /> },
   "presentation-editor": { pill: "Available · browser-local slides and PDF export", render: () => <PresentationStudio /> },
   "ai-assistant": { pill: "Available · server-configured Sarvam 105B", render: () => <AiAssistant /> },

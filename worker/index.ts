@@ -1,4 +1,4 @@
-import { buildDocumentRequest, buildRequest, extractAnswer, stripCodeFence, validateAiInput, validateInstructions, type AiTask } from "../src/lib/ai";
+import { buildDocumentRequest, buildRequest, buildShortDocumentRequest, extractAnswer, stripCodeFence, validateAiInput, validateInstructions, type AiTask } from "../src/lib/ai";
 
 interface Env {
   ASSETS: { fetch: (request: Request) => Promise<Response> };
@@ -43,11 +43,11 @@ async function handleAi(request: Request, env: Env): Promise<Response> {
     ? buildDocumentRequest(instructions as string, text, env.SARVAM_MODEL)
     : buildRequest(resolvedTask, text, env.SARVAM_MODEL);
 
-  const ask = async (): Promise<string | null> => {
+  const ask = async (body: unknown = payload): Promise<string | null> => {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", "api-subscription-key": apiKey },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(120000),
     });
     if (!response.ok) throw new Error(`AI request failed (${response.status}).`);
@@ -59,6 +59,9 @@ async function handleAi(request: Request, env: Env): Promise<Response> {
   try {
     let answer = await ask();
     if (!answer) answer = await ask();
+    if (!answer && wantsDocument) {
+      answer = await ask(buildShortDocumentRequest(instructions as string, text, env.SARVAM_MODEL));
+    }
     if (!answer) {
       return json({ error: "The AI spent its whole budget thinking and returned no text. Try again, or shorten the document." }, 502);
     }

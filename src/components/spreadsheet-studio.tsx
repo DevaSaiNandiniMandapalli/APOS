@@ -50,9 +50,38 @@ export default function SpreadsheetStudio() {
     setNotice("Exported spreadsheet.csv");
   };
 
-  const importCsv = async (file: File) => {
-    const text = await file.text();
-    const imported = parseCsv(text);
+  const exportXlsx = async () => {
+    const { buildXlsx } = await import("@/lib/office-formats");
+    const grid = Array.from({ length: rows }, (_, row) =>
+      Array.from({ length: cols }, (_, col) => {
+        const id = `${columnLabel(col + 1)}${row + 1}`;
+        return results[id]?.isFormula ? results[id].display : (cells[id] ?? "");
+      }),
+    );
+    const bytes = buildXlsx(grid, "Spreadsheet");
+    const url = URL.createObjectURL(new Blob([new Uint8Array(bytes).slice().buffer as ArrayBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "spreadsheet.xlsx";
+    link.click();
+    URL.revokeObjectURL(url);
+    setNotice("Exported spreadsheet.xlsx");
+  };
+
+  const importSpreadsheet = async (file: File) => {
+    let imported;
+    if (/\.xlsx$/i.test(file.name)) {
+      const { readXlsxRows } = await import("@/lib/office-formats");
+      const grid = readXlsxRows(new Uint8Array(await file.arrayBuffer()));
+      imported = Object.fromEntries(
+        grid.flatMap((values, row) =>
+          values.map((value, col) => [`${columnLabel(col + 1)}${row + 1}`, value] as const).filter(([, value]) => value.trim() !== ""),
+        ),
+      );
+    } else {
+      imported = parseCsv(await file.text());
+    }
+    if (!Object.keys(imported).length) { setNotice("That file has no filled cells."); return; }
     const maxRow = Object.keys(imported).reduce((max, id) => {
       const match = /([0-9]+)$/.exec(id);
       return match ? Math.max(max, Number(match[1])) : max;
@@ -66,7 +95,7 @@ export default function SpreadsheetStudio() {
     setCells(imported);
     setRows(Math.max(rows, maxRow, 10));
     setCols(Math.max(cols, maxCol, 5));
-    setNotice(`Imported ${file.name}`);
+    setNotice(`Imported ${file.name} — edit any cell, then export Excel or CSV.`);
   };
 
   const clearAll = () => {
@@ -96,17 +125,18 @@ export default function SpreadsheetStudio() {
         <button type="button" onClick={addRow}>Add row</button>
         <button type="button" onClick={addColumn}>Add column</button>
         <button type="button" onClick={exportCsv}>Export CSV</button>
-        <button type="button" onClick={() => fileRef.current?.click()}>Import CSV</button>
+        <button type="button" onClick={() => fileRef.current?.click()}>Import Excel or CSV</button>
+        <button type="button" onClick={() => void exportXlsx()}>Export Excel</button>
         <button type="button" onClick={clearAll}>Clear</button>
         <input
           ref={fileRef}
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           className="spreadsheet__file"
-          aria-label="Import CSV file"
+          aria-label="Import an Excel or CSV file"
           onChange={(event) => {
             const file = event.target.files?.[0];
-            if (file) void importCsv(file);
+            if (file) void importSpreadsheet(file);
             event.target.value = "";
           }}
         />

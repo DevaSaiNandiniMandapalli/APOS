@@ -58,11 +58,11 @@ export function moveStep(workflow: Workflow, id: string, direction: -1 | 1): Wor
 
 export function validateWorkflow(workflow: Workflow): string[] {
   const errors: string[] = [];
-  if (!workflow.name.trim()) errors.push("Give the workflow a name.");
-  if (workflow.steps.length === 0) errors.push("Add at least one step.");
+  if (!workflow.name.trim()) errors.push("Add a name for the workflow before saving.");
+  if (workflow.steps.length === 0) errors.push("Add at least one step. Pick a tool from the palette, then save.");
   const known = new Set(STEP_CATALOG.map((step) => step.type));
   workflow.steps.forEach((step, index) => {
-    if (!known.has(step.type)) errors.push(`Step ${index + 1} is not supported.`);
+    if (!known.has(step.type)) errors.push(`Step ${index + 1} (${step.type}) is not a supported tool in this workflow.`);
   });
   return errors;
 }
@@ -72,10 +72,15 @@ export function serializeWorkflow(workflow: Workflow): string {
 }
 
 export function parseWorkflow(text: string): { workflow: Workflow } | { error: string } {
+  let data: { name?: unknown; steps?: unknown };
   try {
-    const data = JSON.parse(text) as { name?: unknown; steps?: unknown };
+    data = JSON.parse(text) as { name?: unknown; steps?: unknown };
+  } catch {
+    return { error: "That file is not valid JSON. Export a workflow from APOS and open that file." };
+  }
+  try {
     if (!data || typeof data !== "object" || !Array.isArray(data.steps)) {
-      return { error: "Not a valid workflow file." };
+      return { error: "Not a valid workflow file. It needs a \"steps\" array — export one from APOS first." };
     }
     const known = new Set(STEP_CATALOG.map((step) => step.type));
     const steps: WorkflowStep[] = data.steps.map((item, index) => {

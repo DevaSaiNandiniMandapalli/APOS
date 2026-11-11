@@ -163,3 +163,38 @@ export async function buildSlidesPdf(slides: string[][], title: string): Promise
   }
   return doc.save();
 }
+
+/** Lays out text and pictures together, preserving the order they arrive in. */
+export async function buildBlocksPdf(blocks: Array<{ kind: "text"; text: string } | { kind: "image"; bytes: Uint8Array; format: "png" | "jpeg"; width: number; height: number }>, title: string): Promise<Uint8Array>;
+export async function buildBlocksPdf(
+  blocks: Array<{ kind: "text"; text: string } | { kind: "image"; bytes: Uint8Array; format: "png" | "jpeg"; width: number; height: number }>,
+  title: string,
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  doc.setTitle(toPdfSafeText(title));
+  doc.setProducer("APOS");
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  let cursor = newPage(doc, 595.28, 841.89, PDF_EXPORT_LIMITS.margin, font, bold, PDF_EXPORT_LIMITS.fontSize);
+  cursor = writeLine(doc, cursor, toPdfSafeText(title), { size: 18, bold: true });
+  cursor.y -= 10;
+  const contentWidth = cursor.width - cursor.margin * 2;
+  for (const block of blocks) {
+    if (block.kind === "text") {
+      cursor = writeLine(doc, cursor, toPdfSafeText(block.text));
+      cursor.y -= 4;
+      continue;
+    }
+    let image;
+    try {
+      image = block.format === "png" ? await doc.embedPng(block.bytes) : await doc.embedJpg(block.bytes);
+    } catch { continue; }
+    const scale = Math.min(1, contentWidth / image.width, (cursor.height - cursor.margin * 2) / image.height);
+    const drawWidth = image.width * scale;
+    const drawHeight = image.height * scale;
+    if (cursor.y - drawHeight < cursor.margin) cursor = newPage(doc, cursor.width, cursor.height, cursor.margin, cursor.font, cursor.bold, cursor.size);
+    cursor.page.drawImage(image, { x: cursor.margin, y: cursor.y - drawHeight, width: drawWidth, height: drawHeight });
+    cursor.y -= drawHeight + 10;
+  }
+  return doc.save();
+}

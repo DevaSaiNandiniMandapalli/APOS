@@ -360,4 +360,17 @@ describe("annotation comments", () => {
     expect(withoutAnnotation.comments).toEqual([pageComment, unrelated]);
     expect(document.annotations).toHaveLength(2);
   });
+
+  it("creates a text-edit draft that survives even with empty replacement text", () => {
+    const draft = createDraftAnnotation("text-edit", { x: 0.1, y: 0.1 }, { x: 0.4, y: 0.16 }, 1, "");
+    expect(draft.kind).toBe("text-edit");
+    expect(isMeaningfulAnnotation(draft)).toBe(true);
+  });
+
+  it("keeps the replacement text on a text-edit draft", () => {
+    const draft = createDraftAnnotation("text-edit", { x: 0.1, y: 0.1 }, { x: 0.5, y: 0.2 }, 2, "Corrected total");
+    if (draft.kind !== "text-edit") throw new Error("Expected a text-edit draft");
+    expect(draft.text).toBe("Corrected total");
+    expect(draft.page).toBe(2);
+  });
 });

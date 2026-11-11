@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PDFDocument } from "@cantoo/pdf-lib";
-import { markPdf, type MarkOptions } from "./pdf-marking";
+import { formatNumber, markPdf, type MarkOptions } from "./pdf-marking";
+import { checkPdfHeader } from "./pdf-limits";
 
 const defaults: MarkOptions = { operation: "watermark", text: "CONFIDENTIAL", pages: "all", position: "center", rotation: 315, opacity: 0.25, fontSize: 36, startNumber: 1, template: "Page {n}" };
 
@@ -38,5 +39,42 @@ describe("PDF watermarks and page numbering", () => {
     await expect(markPdf(bytes, { ...defaults, operation: "page-number", template: "Number" })).rejects.toThrow("includes {n}");
     await expect(markPdf(bytes, { ...defaults, text: "", pages: "1", image: { bytes: new Uint8Array([1, 2, 3]), format: "png" } })).rejects.toThrow();
     await expect(markPdf(new TextEncoder().encode("%PDF-1.7 corrupt"), defaults)).rejects.toThrow("corrupt, encrypted, or unsupported");
+  });
+});
+
+describe("number formatting", () => {
+  it("formats decimal, roman and letter styles", () => {
+    expect(formatNumber(1)).toBe("1");
+    expect(formatNumber(4, "roman")).toBe("iv");
+    expect(formatNumber(9, "roman")).toBe("ix");
+    expect(formatNumber(14, "roman")).toBe("xiv");
+    expect(formatNumber(1987, "roman-upper")).toBe("MCMLXXXVII");
+    expect(formatNumber(1, "alpha")).toBe("a");
+    expect(formatNumber(26, "alpha")).toBe("z");
+    expect(formatNumber(27, "alpha")).toBe("aa");
+    expect(formatNumber(3, "alpha-upper")).toBe("C");
+  });
+
+  it("places straight text when the angle is zero", async () => {
+    const output = await markPdf(await sourcePdf(), {
+      ...defaults,
+      operation: "page-number",
+      text: "",
+      template: "{n}",
+      numberStyle: "roman",
+      rotation: 0,
+      position: "bottom-center",
+    });
+    expect(checkPdfHeader(output)).toBe(true);
+    expect((await PDFDocument.load(output)).getPageCount()).toBe(3);
+  });
+
+  it("writes page numbers upright and in the chosen style", async () => {
+    const output = await markPdf(await sourcePdf(), {
+      ...defaults, operation: "page-number", text: "", template: "{n}", rotation: 0, position: "bottom-center", numberStyle: "roman",
+    });
+    const reloaded = await PDFDocument.load(output);
+    expect(reloaded.getPageCount()).toBe(3);
+    expect(output.byteLength).toBeGreaterThan((await sourcePdf()).byteLength);
   });
 });

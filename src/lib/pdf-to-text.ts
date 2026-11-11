@@ -1,4 +1,5 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
+import { renderPdfPicturePages } from "./pdf-page-images";
 import { PDF_LIMITS, checkPdfHeader } from "./pdf-limits";
 import { CONVERSION_LIMITS, validatePlainTextOutput } from "./conversion-engine";
 
@@ -85,7 +86,9 @@ export async function convertPdfFileToHtml(
   try {
     const text = new TextDecoder("utf-8", { fatal: true }).decode(textResult.bytes);
     const escaped = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PDF text extraction</title><style>body{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.6 system-ui,sans-serif;color:#20212b}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style></head><body><main><pre>${escaped}</pre></main></body></html>`;
+    const pictures = await renderPdfPicturePages(file as File, { signal, scale: 1.5 });
+    const imageMarkup = pictures.pages.map((picture) => `<figure><img src="${picture.dataUrl}" alt="Page ${picture.page} of the original document" width="${picture.width}" height="${picture.height}"><figcaption>Page ${picture.page}</figcaption></figure>`).join("");
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PDF text extraction</title><style>body{max-width:900px;margin:2rem auto;padding:0 1rem;font:16px/1.6 system-ui,sans-serif;color:#20212b}pre{white-space:pre-wrap;overflow-wrap:anywhere}figure{margin:1.5rem 0}img{max-width:100%;height:auto;border:1px solid #d8dae5;border-radius:6px}figcaption{color:#5b5f74;font-size:13px}</style></head><body><main><pre>${escaped}</pre>${imageMarkup ? `<section aria-label="Page pictures"><h2>Page pictures</h2>${imageMarkup}</section>` : ""}</main></body></html>`;
     const bytes = new TextEncoder().encode(html);
     return { bytes, pageCount: textResult.pageCount, characterCount: textResult.characterCount };
   } finally { textResult.bytes.fill(0); }

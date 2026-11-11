@@ -1,6 +1,7 @@
 import { convertPdfFileToText } from "./pdf-to-text";
-import { OFFICE_LIMITS, buildDocx, buildXlsx, readDocxParagraphs, readPptxSlides, readXlsxRows } from "./office-formats";
-import { buildParagraphPdf, buildSlidesPdf, buildTablePdf } from "./office-pdf";
+import { OFFICE_LIMITS, buildDocxRich, buildXlsx, readDocxBlocks, readPptxSlides, readXlsxRows } from "./office-formats";
+import { buildBlocksPdf, buildParagraphPdf, buildSlidesPdf, buildTablePdf } from "./office-pdf";
+import { dataUrlToBytes, renderPdfPicturePages } from "./pdf-page-images";
 
 export type OfficeMode = "pdf-to-office" | "document-to-pdf" | "spreadsheet-to-pdf" | "presentation-to-pdf";
 export type OfficeTarget = "docx" | "xlsx";
@@ -130,11 +131,17 @@ export async function convertOffice(
     }
     const paragraphs = paragraphsFromPlainText(text.replace(/^--- Page \d+ ---$/gm, ""));
     if (!paragraphs.length) throw new Error("No selectable text was found. Scanned PDFs need the OCR PDF tool first.");
+    onProgress("Copying the page pictures…");
+    const pictures = await renderPdfPicturePages(file, { signal, onProgress: (page, total) => onProgress(`Copying page pictures ${page} of ${total}…`) });
+    const blocks = [
+      ...paragraphs.map((paragraph) => ({ kind: "text" as const, text: paragraph })),
+      ...pictures.pages.map((image) => ({ kind: "image" as const, bytes: dataUrlToBytes(image.dataUrl), format: "png" as const, width: image.width, height: image.height })),
+    ];
     return {
-      bytes: buildDocx(paragraphs, name),
+      bytes: buildDocxRich(blocks, name),
       fileName: `${name}.docx`,
       mime: MIME.docx,
-      detail: `${paragraphs.length} paragraph(s) from ${extracted.pageCount} page(s). Images and page layout are not carried over.`,
+      detail: `${paragraphs.length} paragraph(s) from ${extracted.pageCount} page(s)${pictures.pages.length ? `, plus ${pictures.pages.length} page picture(s)` : ""}.`,
     };
   }
 
@@ -143,17 +150,19 @@ export async function convertOffice(
 
   if (mode === "document-to-pdf") {
     onProgress("Reading the document…");
-    let paragraphs: string[];
-    if (/\.docx$/i.test(file.name)) paragraphs = readDocxParagraphs(buffer);
-    else paragraphs = paragraphsFromPlainText(new TextDecoder().decode(buffer));
-    if (!paragraphs.length) throw new Error("This document has no readable text.");
-    if (paragraphs.length > OFFICE_LIMITS.maxParagraphs) throw new Error(`This document has more than ${OFFICE_LIMITS.maxParagraphs} paragraphs. Split it first.`);
+    const isDocx = /\.docx$/i.test(file.name);
+    const blocks = isDocx
+      ? readDocxBlocks(buffer)
+      : paragraphsFromPlainText(new TextDecoder().decode(buffer)).map((text) => ({ kind: "text" as const, text }));
+    if (!blocks.length) throw new Error("This document has no readable content.");
+    if (blocks.length > OFFICE_LIMITS.maxParagraphs) throw new Error(`This document has more than ${OFFICE_LIMITS.maxParagraphs} items. Split it first.`);
     onProgress("Laying out the PDF…");
+    const pictures = blocks.filter((block) => block.kind === "image").length;
     return {
-      bytes: await buildParagraphPdf(paragraphs, name),
+      bytes: isDocx ? await buildBlocksPdf(blocks, name) : await buildParagraphPdf(blocks.map((block) => (block.kind === "text" ? block.text : "")), name),
       fileName: `${name}.pdf`,
       mime: MIME.pdf,
-      detail: `${paragraphs.length} paragraph(s) reflowed into a new PDF.`,
+      detail: `${blocks.length} item(s) reflowed into a new PDF${pictures ? `, including ${pictures} picture(s)` : ""}.`,
     };
   }
 

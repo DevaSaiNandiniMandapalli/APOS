@@ -349,6 +349,7 @@ export default function DocumentEditor({
   const [hasPostRestoreEdit, setHasPostRestoreEdit] = useState(true);
   const [reopenError, setReopenError] = useState<string | null>(null);
   const reopenInputRef = useRef<HTMLInputElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const pageSettings = useMemo(
     () => document.pageSettings,
@@ -443,6 +444,28 @@ export default function DocumentEditor({
       setExportStatus({ kind: "error", message });
     }
   }, [document, title]);
+
+  const handleImportFile = useCallback(
+    async (file: File) => {
+      if (saveStatus === "dirty" && !window.confirm("You have unsaved changes. Import this file anyway?")) return;
+      setReopenError(null);
+      try {
+        const { blocksFromFile } = await import("@/lib/document-editor");
+        const blocks = await blocksFromFile(file);
+        const title = file.name.replace(/\.[^.]+$/, "") || "Imported document";
+        const next = { ...createDocument(title), blocks };
+        setRecovery(null);
+        setJustRestoredId(null);
+        setHasPostRestoreEdit(true);
+        setSaveStatus("idle");
+        clearDocument();
+        applyDocument(next);
+      } catch (reason) {
+        setReopenError(reason instanceof Error ? reason.message : "That file could not be opened.");
+      }
+    },
+    [saveStatus, applyDocument, clearDocument],
+  );
 
   const handleReopenOpenPicker = useCallback(() => {
     reopenInputRef.current?.click();
@@ -587,6 +610,19 @@ export default function DocumentEditor({
             {exportStatus.kind === "exporting" ? "Exporting…" : "Export PDF"}
           </button>
           <button type="button" onClick={handleReopenOpenPicker} disabled={readOnly}>Reopen</button>
+          <button type="button" onClick={() => importInputRef.current?.click()} disabled={readOnly}>Import Word or text</button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".docx,.txt,.md,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            className="sr-only"
+            aria-label="Import a Word or text file"
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              if (file) void handleImportFile(file);
+              event.currentTarget.value = "";
+            }}
+          />
           <input
             ref={reopenInputRef}
             type="file"

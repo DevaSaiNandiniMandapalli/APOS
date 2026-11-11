@@ -9,13 +9,13 @@ export const AI_TASKS: { id: AiTask; label: string; instruction: string }[] = [
 
 export const MAX_INPUT_CHARS = 12000;
 export const MAX_INSTRUCTION_CHARS = 2000;
-export const MAX_DOCUMENT_TOKENS = 8192;
+export const MAX_DOCUMENT_TOKENS = 16384;
 /**
  * Sarvam 105B is a reasoning model: it spends most of its budget thinking before
  * it writes the answer. Measured runs used ~2000 reasoning tokens for a short
  * summary, so the budget has to cover thinking and output together.
  */
-export const MAX_RESPONSE_TOKENS = 8192;
+export const MAX_RESPONSE_TOKENS = 12288;
 export const DEFAULT_MODEL = "sarvam-105b";
 
 export function validateAiInput(text: string): string | null {
@@ -82,6 +82,19 @@ export function buildDocumentRequest(instructions: string, text: string, model =
     temperature: 0.2,
     max_tokens: MAX_DOCUMENT_TOKENS,
     messages: buildDocumentMessages(instructions, text),
+  };
+}
+
+/** Second, cheaper attempt used when the model spent its whole budget thinking. */
+export function buildShortDocumentRequest(instructions: string, text: string, model = DEFAULT_MODEL) {
+  return {
+    model,
+    temperature: 0.15,
+    max_tokens: MAX_DOCUMENT_TOKENS,
+    messages: [
+      { role: "system" as const, content: `${DOCUMENT_SYSTEM_PROMPT} Write the document straight away and spend no time planning.` },
+      { role: "user" as const, content: `Instructions:\n${instructions.trim()}\n\nSource document (shortened):\n-----\n${text.trim().slice(0, 4000)}` },
+    ],
   };
 }
 

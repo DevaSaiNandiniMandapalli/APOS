@@ -590,3 +590,40 @@ export function withPageSettings(
     updatedAt: Date.now(),
   };
 }
+
+/** Turns plain text or a .docx body into editable blocks; pictures become images. */
+export async function blocksFromFile(file: File): Promise<Block[]> {
+  const stem = file.name.replace(/\.[^.]+$/, "") || "Imported document";
+  const idBase = `${stem}-${Date.now()}`;
+  const blocks: Block[] = [];
+  let index = 0;
+  const pushParagraph = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    index += 1;
+    blocks.push({ id: `${idBase}-b${index}`, type: "paragraph", text: [{ text: trimmed, marks: { ...EMPTY_MARKS } }] });
+  };
+
+  if (/\.docx$/i.test(file.name)) {
+    const { readDocxBlocks } = await import("./office-formats");
+    for (const block of readDocxBlocks(new Uint8Array(await file.arrayBuffer()))) {
+      if (block.kind === "text") { pushParagraph(block.text); continue; }
+      index += 1;
+      const binary = Array.from(block.bytes, (byte) => String.fromCharCode(byte)).join("");
+      blocks.push({
+        id: `${idBase}-b${index}`,
+        type: "image",
+        src: `data:image/${block.format === "png" ? "png" : "jpeg"};base64,${btoa(binary)}`,
+        alt: `Picture ${index} from ${file.name}`,
+        width: Math.min(560, block.width),
+        height: null,
+      });
+    }
+  } else {
+    const text = await file.text();
+    for (const chunk of text.replace(/\r\n?/g, "\n").split(/\n{2,}/)) pushParagraph(chunk);
+  }
+
+  if (!blocks.length) throw new Error("That file has no readable content to edit.");
+  return blocks;
+}

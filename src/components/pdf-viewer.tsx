@@ -71,6 +71,7 @@ const AVAILABLE_ANNOTATION_TOOLS = [
   "line",
   "arrow",
   "text-box",
+  "text-edit",
   "image",
 ] as const satisfies readonly AnnotationTool[];
 
@@ -1028,6 +1029,35 @@ export default function PdfViewer() {
       );
     }
 
+    if (annotation.kind === "text-edit") {
+      return (
+        <div
+          key={annotation.id}
+          data-annotation-kind="text-edit"
+          data-annotation-id={annotation.id}
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            left: `${annotation.x * 100}%`,
+            top: `${annotation.y * 100}%`,
+            width: `${annotation.width * 100}%`,
+            height: `${annotation.height * 100}%`,
+            padding: 4,
+            overflow: "hidden",
+            background: "#ffffff",
+            color: annotation.color,
+            fontSize: Math.max(6, annotation.fontSize * pageSize.height),
+            lineHeight: 1.2,
+            whiteSpace: "pre-wrap",
+            pointerEvents: "none",
+            userSelect: "none",
+          }}
+        >
+          {annotation.text}
+        </div>
+      );
+    }
+
     if (annotation.kind === "image") {
       return (
         <div
@@ -1340,10 +1370,10 @@ export default function PdfViewer() {
             </p>
           )}
 
-          {activeTool === "text-box" && (
+          { (activeTool === "text-box" || activeTool === "text-edit") && (
             <div className="split-settings" role="group" aria-label="New text box settings">
               <label>
-                Text box content
+                {activeTool === "text-edit" ? "Replacement text" : "Text box content"}
                 <textarea
                   value={textBoxText}
                   rows={3}
@@ -1568,7 +1598,7 @@ export default function PdfViewer() {
                 <li key={annotation.id}>
                   <span className="merge-filename">
                     {ANNOTATION_TOOL_LABELS[annotation.kind]} annotation {index + 1}
-                    {annotation.kind === "text-box" && annotation.text.trim()
+                    {(annotation.kind === "text-box" || annotation.kind === "text-edit") && annotation.text.trim()
                       ? `: ${annotation.text.trim().slice(0, 48)}`
                       : ""}
                   </span>
@@ -1613,16 +1643,16 @@ export default function PdfViewer() {
                   </button>
                 </div>
 
-                {selectedAnnotation.kind === "text-box" && (
+                {(selectedAnnotation.kind === "text-box" || selectedAnnotation.kind === "text-edit") && (
                   <>
                     <label>
-                      Text box content
+                      {selectedAnnotation.kind === "text-edit" ? "Replacement text" : "Text box content"}
                       <textarea
                         value={selectedAnnotation.text}
                         rows={3}
                         onChange={(event) => updateAnnotation(
                           selectedAnnotation.id,
-                          (annotation) => annotation.kind === "text-box"
+                          (annotation) => (annotation.kind === "text-box" || annotation.kind === "text-edit")
                             ? { ...annotation, text: event.target.value }
                             : annotation,
                           true,
@@ -1638,7 +1668,7 @@ export default function PdfViewer() {
                           value={selectedAnnotation.fontSize}
                           onChange={(event) => updateAnnotation(
                             selectedAnnotation.id,
-                            (annotation) => annotation.kind === "text-box"
+                            (annotation) => (annotation.kind === "text-box" || annotation.kind === "text-edit")
                               ? { ...annotation, fontSize: Number(event.target.value) }
                               : annotation,
                             true,
@@ -1657,7 +1687,7 @@ export default function PdfViewer() {
                           value={selectedAnnotation.color}
                           onChange={(event) => updateAnnotation(
                             selectedAnnotation.id,
-                            (annotation) => annotation.kind === "text-box"
+                            (annotation) => (annotation.kind === "text-box" || annotation.kind === "text-edit")
                               ? { ...annotation, color: event.target.value }
                               : annotation,
                             true,
