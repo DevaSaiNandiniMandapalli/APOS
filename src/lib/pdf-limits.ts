@@ -3,8 +3,10 @@ export const PDF_LIMITS = {
   perFileBytes: 50 * 1024 * 1024,
   totalBytes: 100 * 1024 * 1024,
   pages: 500,
-  splitOutputs: 20,
+  splitOutputs: 500,
   splitTotalBytes: 100 * 1024 * 1024,
+  mergeOutputBytes: 100 * 1024 * 1024,
+  rotateOutputBytes: 50 * 1024 * 1024,
 } as const;
 
 export type PdfInputErrorCode = "empty" | "too-few" | "too-many" | "too-large" | "wrong-signature" | "invalid-pdf" | "too-many-pages" | "invalid-pages" | "too-many-outputs";

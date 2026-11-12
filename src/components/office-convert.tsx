@@ -1,12 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { MODE_COPY, convertOffice, type OfficeMode, type OfficeTarget } from "@/lib/office-convert";
+import { MODE_COPY, convertOffice, type OfficeMode } from "@/lib/office-convert";
 
 export default function OfficeConvert({ mode }: { mode: OfficeMode }) {
   const copy = MODE_COPY[mode];
   const [file, setFile] = useState<File | null>(null);
-  const [target, setTarget] = useState<OfficeTarget>("docx");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
@@ -34,7 +33,7 @@ export default function OfficeConvert({ mode }: { mode: OfficeMode }) {
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const output = await convertOffice(mode, file, { target, signal: controller.signal, onProgress: setProgress });
+      const output = await convertOffice(mode, file, { signal: controller.signal, onProgress: setProgress });
       if (controller.signal.aborted) return;
       const blob = new Blob([output.bytes as unknown as BlobPart], { type: output.mime });
       const url = URL.createObjectURL(blob);
@@ -72,16 +71,6 @@ export default function OfficeConvert({ mode }: { mode: OfficeMode }) {
           onChange={(event) => { pick(event.currentTarget.files?.[0]); event.currentTarget.value = ""; }}
         />
       </label>
-
-      {mode === "pdf-to-office" && (
-        <div className="office__row">
-          <label htmlFor="office-target">Output format</label>
-          <select id="office-target" value={target} disabled={busy} onChange={(event) => setTarget(event.target.value as OfficeTarget)}>
-            <option value="docx">Word document (.docx)</option>
-            <option value="xlsx">Excel workbook (.xlsx)</option>
-          </select>
-        </div>
-      )}
 
       <div className="office__actions">
         <button type="button" className="hero-cta" disabled={!file || busy} onClick={() => void run()}>

@@ -1,6 +1,7 @@
 import { PDFDocument } from "@cantoo/pdf-lib";
 import { convertImageFile, type ImageOutputFormat } from "./image-convert";
 import { convertOffice, type OfficeMode } from "./office-convert";
+import { convertPdfToOffice } from "./pdf-to-office";
 import { buildDocx, buildXlsx, readDocxParagraphs, readPptxSlides, readXlsxRows } from "./office-formats";
 import { buildParagraphPdf } from "./office-pdf";
 import { convertPdfFileToText } from "./pdf-to-text";
@@ -94,7 +95,7 @@ export function planConversion(kind: SourceKind, target: Target): Plan {
     if (target === "pdf") return { supported: true, description: "Place the image on a PDF page." };
   }
   if (kind === "pdf") {
-    if (target === "docx" || target === "xlsx") return { supported: true, description: "Extract the PDF text into an editable office file." };
+    if (target === "docx" || target === "xlsx") return { supported: true, description: "Rebuild the PDF into an editable office file; image-only pages need OCR or Visual Word." };
     if (target === "txt") return { supported: true, description: "Extract the PDF text." };
   }
   if (OFFICE_KINDS.includes(kind)) {
@@ -148,7 +149,16 @@ export async function convertUniversal(
 
   if (kind === "pdf") {
     if (target === "docx" || target === "xlsx") {
-      return convertOffice("pdf-to-office", asFile(), { target, signal, onProgress });
+      const converted = await convertPdfToOffice(asFile(), {
+        format: target,
+        mode: "editable",
+        pages: "",
+        includeTables: true,
+        includePictures: true,
+        pageBreaks: true,
+        ocrScannedPages: false,
+      }, { signal, onProgress });
+      return { bytes: converted.bytes, fileName: converted.fileName, mime: converted.mime, detail: converted.detail };
     }
     const extracted = await convertPdfFileToText(asFile(), { includePageLabels: false }, signal, ({ completedPages, totalPages }) => onProgress(`Reading page ${completedPages} of ${totalPages}…`));
     return finish(extracted.bytes, `Extracted text from ${extracted.pageCount} page(s).`);

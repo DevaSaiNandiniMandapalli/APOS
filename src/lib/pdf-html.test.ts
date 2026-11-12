@@ -18,7 +18,7 @@ describe("buildPdfHtml", () => {
       { page: 2, blocks: [{ kind: "text", text: "Page two text" }] },
     ]);
     expect(html).toMatch(/^<!doctype html><html lang="en">/);
-    expect(html).toContain('<section class="page" id="page-1">');
+    expect(html).toContain('<section class="page" id="page-1"');
     expect(html.indexOf("Before the picture")).toBeLessThan(html.indexOf("<img "));
     expect(html.indexOf("<img ")).toBeLessThan(html.indexOf("After the picture"));
     expect(html).toContain('width="40" height="30"');

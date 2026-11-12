@@ -1,8 +1,27 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
-import { PDFDocument, StandardFonts } from "@cantoo/pdf-lib";
+import { degrees, PDFDocument, StandardFonts } from "@cantoo/pdf-lib";
 import { unzipSync } from "fflate";
 import { toolDefinitions } from "../src/lib/registry";
+import { validatePdfWithPdfJs } from "./pdf-js-validation";
+
+const MIXED_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAgAAAAECAYAAACzzX7wAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEklEQVQImWP4z8DwHx9moL0CAHD0P8FDxlD6AAAAAElFTkSuQmCC";
+
+async function makeMixedPdf() {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const image = await pdf.embedPng(Buffer.from(MIXED_PNG, "base64"));
+  const portrait = pdf.addPage([300, 400]);
+  portrait.drawText("Portrait page", { x: 24, y: 340, size: 14, font });
+  const landscape = pdf.addPage([500, 300]);
+  landscape.drawText("Landscape page", { x: 24, y: 240, size: 14, font });
+  const picture = pdf.addPage([320, 480]);
+  picture.drawImage(image, { x: 24, y: 300, width: 80, height: 40 });
+  const rotated = pdf.addPage([600, 350]);
+  rotated.drawText("Rotated source page", { x: 24, y: 280, size: 14, font });
+  rotated.setRotation(degrees(90));
+  return Buffer.from(await pdf.save());
+}
 
 test("search is keyboard accessible and its result opens the tool route", async ({ page }) => {
   await page.goto("/");
@@ -39,7 +58,7 @@ test("every registry tool has a working route and honest status presentation", a
       await expect(page.locator('input[type="file"]')).toHaveCount(0);
     }
     if (tool.id === "edit-pdf") {
-      await expect(page.getByText("In Development · PDF viewer")).toBeVisible();
+      await expect(page.getByText("Available · text editing in the browser")).toBeVisible();
       await expect(page.getByRole("heading", { level: 2, name: "PDF Viewer" })).toBeVisible();
       await expect(page.locator('input[type="file"]')).toHaveCount(1);
     }
@@ -52,7 +71,7 @@ test("every registry tool has a working route and honest status presentation", a
 
 test("Edit PDF rejects a file whose content lacks a PDF signature", async ({ page }) => {
   await page.goto("/tools/edit-pdf");
-  await expect(page.getByText("In Development · PDF viewer")).toBeVisible();
+  await expect(page.getByText("Available · text editing in the browser")).toBeVisible();
   await page.getByLabel("Choose PDF").setInputFiles({
     name: "not-really.pdf",
     mimeType: "application/pdf",
@@ -228,7 +247,7 @@ test("PDF to HTML creates a validated HTML reading view and escapes document tex
   pdf.addPage([320, 420]).drawText("Safe <tag> & text", { x: 20, y: 350, font });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/tools/pdf-to-html");
-  await expect(page.getByText("HTML output does not preserve PDF layout, fonts, images or tables.")).toBeVisible();
+  await expect(page.getByText("Turn selectable PDF text into a safe, responsive HTML document.")).toBeVisible();
   await page.getByLabel("Choose PDF files").setInputFiles({ name: "source.pdf", mimeType: "application/pdf", buffer: Buffer.from(await pdf.save()) });
   await page.getByRole("button", { name: "Convert 1 queued file to HTML" }).click();
   await expect(page.getByLabel("Complete")).toHaveCount(1, { timeout: 20000 });
@@ -244,14 +263,16 @@ test("PDF to HTML creates a validated HTML reading view and escapes document tex
   expect(html).toContain("<!doctype html>");
   expect(html).toContain("&lt;tag&gt; &amp; text");
   expect(html).not.toContain("<tag>");
-  expect(html).toContain("<main><pre>");
+  expect(html).toContain("<main>");
+  expect(html).toContain("<section class=\"page\" id=\"page-1\"");
+  expect(html).toContain("Content-Security-Policy");
 });
 
 test("merge rejects files without PDF signatures and leaves no download", async ({ page }) => {
   await page.goto("/tools/merge-pdf");
   await page.locator('input[type="file"]').setInputFiles({ name: "invoice.pdf", mimeType: "application/pdf", buffer: Buffer.from("not a PDF") });
   await expect(page.locator(".merge-error")).toContainText("does not have a PDF signature");
-  await expect(page.getByRole("link", { name: "Download merged PDF" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "merged.pdf" })).toHaveCount(0);
 });
 
 test("merge processes real PDF fixtures and downloads a validated combined document", async ({ page }) => {
@@ -267,20 +288,28 @@ test("merge processes real PDF fixtures and downloads a validated combined docum
     { name: "second.pdf", mimeType: "application/pdf", buffer: await makePdf(500, 600) },
   ]);
   await expect(page.getByRole("list", { name: "PDF merge order" }).getByRole("listitem")).toHaveCount(2);
+  await expect(page.locator(".pdf-merge-thumb img")).toHaveCount(2, { timeout: 20000 });
+  await expect(page.locator(".pdf-merge-copy").nth(1)).toContainText("1 page");
   await page.getByRole("button", { name: "Move second.pdf up" }).click();
+  await page.getByLabel("Output filename").fill("combined.pdf");
   const a11y = await new AxeBuilder({ page }).analyze();
   expect(a11y.violations).toEqual([]);
   await page.getByRole("button", { name: "Merge PDFs" }).click();
-  await expect(page.getByText(/Validated PDF ready · 2 pages/)).toBeVisible();
+  await expect(page.getByText(/Validated merged PDF · 2 pages/)).toBeVisible();
   const downloadEvent = page.waitForEvent("download");
-  await page.getByRole("link", { name: "Download merged PDF" }).click();
+  await page.getByRole("link", { name: "combined.pdf" }).click();
   const download = await downloadEvent;
-  expect(download.suggestedFilename()).toBe("merged-document.pdf");
+  expect(download.suggestedFilename()).toBe("combined.pdf");
   const stream = await download.createReadStream();
   const chunks: Buffer[] = [];
   for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
-  const output = await PDFDocument.load(Buffer.concat(chunks));
+  const downloadedBytes = Buffer.concat(chunks);
+  const output = await PDFDocument.load(downloadedBytes);
   expect(output.getPages().map((pdfPage) => pdfPage.getSize())).toEqual([{ width: 500, height: 600 }, { width: 300, height: 400 }]);
+  await validatePdfWithPdfJs(new Uint8Array(downloadedBytes), {
+    expectedPageCount: 2,
+    expectedSizes: [{ width: 500, height: 600 }, { width: 300, height: 400 }],
+  });
 });
 
 test("merge cancellation terminates its worker without exposing a partial download", async ({ page }) => {
@@ -288,12 +317,18 @@ test("merge cancellation terminates its worker without exposing a partial downlo
     const prototype = Worker.prototype;
     const postMessage = prototype.postMessage;
     const terminate = prototype.terminate;
+    const tracked = new WeakSet<Worker>();
     Object.defineProperty(window, "__mergeWorkerTerminated", { value: false, writable: true });
     Object.defineProperty(prototype, "postMessage", { value: function (this: Worker, message: unknown, transfer?: Transferable[]) {
-      window.setTimeout(() => Reflect.apply(postMessage, this, [message, transfer]), 1000);
+      if (message && typeof message === "object" && "files" in message) {
+        tracked.add(this);
+        window.setTimeout(() => Reflect.apply(postMessage, this, [message, transfer]), 1000);
+        return;
+      }
+      return Reflect.apply(postMessage, this, [message, transfer]);
     } });
     prototype.terminate = function () {
-      (window as unknown as { __mergeWorkerTerminated: boolean }).__mergeWorkerTerminated = true;
+      if (tracked.has(this)) (window as unknown as { __mergeWorkerTerminated: boolean }).__mergeWorkerTerminated = true;
       return terminate.call(this);
     };
   });
@@ -309,7 +344,7 @@ test("merge cancellation terminates its worker without exposing a partial downlo
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.locator(".merge-error")).toContainText("Merge cancelled");
   expect(await page.evaluate(() => (window as unknown as { __mergeWorkerTerminated: boolean }).__mergeWorkerTerminated)).toBe(true);
-  await expect(page.getByRole("link", { name: "Download merged PDF" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "merged.pdf" })).toHaveCount(0);
 });
 
 test("merge revokes its generated object URL when its output is cleared", async ({ page }) => {
@@ -331,13 +366,90 @@ test("merge revokes its generated object URL when its output is cleared", async 
     { name: "two.pdf", mimeType: "application/pdf", buffer: fixture },
   ]);
   await page.getByRole("button", { name: "Merge PDFs" }).click();
-  await expect(page.getByRole("link", { name: "Download merged PDF" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "merged.pdf" })).toBeVisible();
   const created = await page.evaluate(() => (window as unknown as { __mergeObjectUrls: { created: string[] } }).__mergeObjectUrls.created);
   expect(created).toHaveLength(1);
   await page.getByRole("button", { name: "Remove one.pdf" }).click();
   const revoked = await page.evaluate(() => (window as unknown as { __mergeObjectUrls: { revoked: string[] } }).__mergeObjectUrls.revoked);
   expect(revoked).toContain(created[0]);
-  await expect(page.getByRole("link", { name: "Download merged PDF" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "merged.pdf" })).toHaveCount(0);
+});
+
+test("merge accepts dropped files, reorders by drag and clears all", async ({ page }) => {
+  const first = await PDFDocument.create(); first.addPage([300, 400]);
+  const second = await PDFDocument.create(); second.addPage([500, 600]);
+  const a = Buffer.from(await first.save()).toString("base64");
+  const b = Buffer.from(await second.save()).toString("base64");
+  await page.goto("/tools/merge-pdf");
+  await page.evaluate(({ a, b }) => {
+    const files = [a, b].map((base64, index) => {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let offset = 0; offset < binary.length; offset += 1) bytes[offset] = binary.charCodeAt(offset);
+      return new File([bytes], index === 0 ? "drop-a.pdf" : "drop-b.pdf", { type: "application/pdf" });
+    });
+    const transfer = new DataTransfer();
+    files.forEach((file) => transfer.items.add(file));
+    const zone = document.querySelector(".pdf-dropzone");
+    if (!zone) throw new Error("drop zone missing");
+    zone.dispatchEvent(new DragEvent("dragenter", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    zone.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    zone.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  }, { a, b });
+  await expect(page.getByRole("list", { name: "PDF merge order" }).getByRole("listitem")).toHaveCount(2);
+  await expect(page.locator(".merge-filename").first()).toHaveText("drop-a.pdf");
+  await page.evaluate(() => {
+    const items = document.querySelectorAll(".pdf-merge-list li");
+    const transfer = new DataTransfer();
+    items[0].dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    items[1].dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    items[1].dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    items[0].dispatchEvent(new DragEvent("dragend", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+  });
+  await expect(page.locator(".merge-filename").first()).toHaveText("drop-b.pdf");
+  await page.getByRole("button", { name: "Clear all" }).click();
+  await expect(page.getByRole("list", { name: "PDF merge order" })).toHaveCount(0);
+});
+
+test("split, rotate, watermark and page-number tools accept a dropped PDF", async ({ page }) => {
+  const pdf = await PDFDocument.create(); pdf.addPage([300, 400]);
+  const base64 = Buffer.from(await pdf.save()).toString("base64");
+  for (const route of ["split-pdf", "rotate-pdf", "pdf-watermark", "pdf-page-numbers"]) {
+    await page.goto(`/tools/${route}`);
+    await page.locator(".pdf-dropzone").waitFor({ timeout: 10000 });
+    await page.evaluate(({ base64 }) => {
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+      const file = new File([bytes], "dropped.pdf", { type: "application/pdf" });
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      const zone = document.querySelector(".pdf-dropzone");
+      if (!zone) throw new Error("drop zone missing");
+      zone.dispatchEvent(new DragEvent("dragenter", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+      zone.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+      zone.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    }, { base64 });
+    await expect(page.locator(".pdf-file-summary")).toContainText("dropped.pdf", { timeout: 10000 });
+  }
+});
+
+test("merge enforces the file-count and page-total limits", async ({ page }) => {
+  const one = await PDFDocument.create(); one.addPage([300, 400]);
+  const oneBuffer = Buffer.from(await one.save());
+  await page.goto("/tools/merge-pdf");
+  await page.locator('input[type="file"]').setInputFiles(Array.from({ length: 11 }, (_, index) => ({ name: `limit-${index + 1}.pdf`, mimeType: "application/pdf", buffer: oneBuffer })));
+  await expect(page.locator(".merge-error")).toContainText("no more than 10");
+  await expect(page.getByRole("list", { name: "PDF merge order" })).toHaveCount(0);
+
+  const large = await PDFDocument.create();
+  for (let index = 0; index < 501; index += 1) large.addPage([200, 200]);
+  await page.locator('input[type="file"]').setInputFiles([
+    { name: "large.pdf", mimeType: "application/pdf", buffer: Buffer.from(await large.save()) },
+    { name: "small.pdf", mimeType: "application/pdf", buffer: oneBuffer },
+  ]);
+  await expect(page.locator(".merge-error")).toContainText("limit is 500", { timeout: 30000 });
+  await expect(page.getByRole("button", { name: "Merge PDFs" })).toBeDisabled();
 });
 
 test("split creates real validated page-range downloads", async ({ page }) => {
@@ -348,7 +460,8 @@ test("split creates real validated page-range downloads", async ({ page }) => {
   await page.goto("/tools/split-pdf");
   await expect(page.getByRole("heading", { name: "Split PDF", exact: true })).toBeVisible();
   await page.locator('input[type="file"]').setInputFiles({ name: "report.pdf", mimeType: "application/pdf", buffer: fixture });
-  await expect(page.getByText("report.pdf · PDF structure is checked during processing")).toBeVisible();
+  await expect(page.locator(".pdf-file-summary")).toContainText("report.pdf");
+  await expect(page.locator(".pdf-file-summary")).toContainText("3 pages", { timeout: 20000 });
   await page.getByLabel("Page ranges").fill("3, 1-2");
   const a11y = await new AxeBuilder({ page }).analyze();
   expect(a11y.violations).toEqual([]);
@@ -361,8 +474,83 @@ test("split creates real validated page-range downloads", async ({ page }) => {
   const stream = await download.createReadStream();
   const chunks: Buffer[] = [];
   for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
-  const output = await PDFDocument.load(Buffer.concat(chunks));
+  const downloadedBytes = Buffer.concat(chunks);
+  const output = await PDFDocument.load(downloadedBytes);
   expect(output.getPages().map((pdfPage) => pdfPage.getSize())).toEqual([{ width: 700, height: 800 }]);
+  await validatePdfWithPdfJs(new Uint8Array(downloadedBytes), {
+    expectedPageCount: 1,
+    expectedSizes: [{ width: 700, height: 800 }],
+  });
+});
+
+test("split supports individual pages, equal groups, extraction and ZIP integrity", async ({ page }) => {
+  const source = await PDFDocument.create();
+  source.addPage([300, 400]); source.addPage([500, 600]); source.addPage([700, 800]);
+  const fixture = Buffer.from(await source.save());
+  await page.goto("/tools/split-pdf");
+  await page.locator('input[type="file"]').setInputFiles({ name: "batch.pdf", mimeType: "application/pdf", buffer: fixture });
+  await expect(page.locator(".pdf-file-summary")).toContainText("3 pages", { timeout: 20000 });
+
+  await page.getByLabel("Split mode").selectOption("individual");
+  await page.getByRole("button", { name: "Split every page" }).click();
+  await expect(page.locator(".pdf-result-list a")).toHaveCount(3, { timeout: 30000 });
+  await expect(page.getByRole("link", { name: "batch-page-0002.pdf" })).toBeVisible();
+  await page.getByRole("button", { name: "Create ZIP of all outputs" }).click();
+  await expect(page.getByRole("link", { name: "Download all as ZIP" })).toBeVisible({ timeout: 20000 });
+  const zipEvent = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download all as ZIP" }).click();
+  const zipDownload = await zipEvent;
+  const zipStream = await zipDownload.createReadStream();
+  const zipChunks: Buffer[] = [];
+  for await (const chunk of zipStream!) zipChunks.push(Buffer.from(chunk));
+  const entries = unzipSync(Buffer.concat(zipChunks));
+  expect(Object.keys(entries).sort()).toEqual(["batch-page-0001.pdf", "batch-page-0002.pdf", "batch-page-0003.pdf"]);
+  expect(entries["batch-page-0002.pdf"].byteLength).toBeGreaterThan(20);
+  const zipSizes = [{ width: 300, height: 400 }, { width: 500, height: 600 }, { width: 700, height: 800 }];
+  for (const [index, name] of Object.keys(entries).sort().entries()) {
+    await validatePdfWithPdfJs(entries[name], {
+      expectedPageCount: 1,
+      expectedSizes: [zipSizes[index]],
+    });
+  }
+
+  await page.getByLabel("Split mode").selectOption("groups");
+  await page.getByLabel("Pages per file").fill("2");
+  await page.getByRole("button", { name: "Split into groups" }).click();
+  await expect(page.locator(".pdf-result-list a")).toHaveCount(2, { timeout: 30000 });
+  await expect(page.getByRole("link", { name: "batch-pages-1-2.pdf" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "batch-pages-3-3.pdf" })).toBeVisible();
+
+  await page.getByLabel("Split mode").selectOption("extract");
+  await page.getByRole("button", { name: "Clear selection" }).click();
+  await page.getByRole("button", { name: "Page 2" }).click();
+  await page.getByRole("button", { name: "Extract selected pages" }).click();
+  await expect(page.getByRole("link", { name: "batch-selected-pages.pdf" })).toBeVisible({ timeout: 30000 });
+  const downloadEvent = page.waitForEvent("download");
+  await page.getByRole("link", { name: "batch-selected-pages.pdf" }).click();
+  const download = await downloadEvent;
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+  const extractedBytes = Buffer.concat(chunks);
+  const extracted = await PDFDocument.load(extractedBytes);
+  expect(extracted.getPages().map((pdfPage) => pdfPage.getSize())).toEqual([{ width: 500, height: 600 }]);
+  await validatePdfWithPdfJs(new Uint8Array(extractedBytes), {
+    expectedPageCount: 1,
+    expectedSizes: [{ width: 500, height: 600 }],
+  });
+});
+
+test("split clears stale outputs when the range changes", async ({ page }) => {
+  const source = await PDFDocument.create();
+  source.addPage([300, 400]); source.addPage([500, 600]);
+  await page.goto("/tools/split-pdf");
+  await page.locator('input[type="file"]').setInputFiles({ name: "stale.pdf", mimeType: "application/pdf", buffer: Buffer.from(await source.save()) });
+  await page.getByLabel("Page ranges").fill("1");
+  await page.getByRole("button", { name: "Split PDF" }).click();
+  await expect(page.locator(".pdf-result-list a")).toHaveCount(1, { timeout: 30000 });
+  await page.getByLabel("Page ranges").fill("2");
+  await expect(page.locator(".pdf-result-list a")).toHaveCount(0);
 });
 
 test("split cancellation terminates its worker without producing downloads", async ({ page }) => {
@@ -370,13 +558,17 @@ test("split cancellation terminates its worker without producing downloads", asy
     const prototype = Worker.prototype;
     const postMessage = prototype.postMessage;
     const terminate = prototype.terminate;
+    const tracked = new WeakSet<Worker>();
     Object.defineProperty(window, "__splitWorkerTerminated", { value: false, writable: true });
     Object.defineProperty(prototype, "postMessage", { value: function (this: Worker, message: unknown, transfer?: Transferable[]) {
-      (window as unknown as { __splitWorkerPosted: boolean }).__splitWorkerPosted = true;
+      if (message && typeof message === "object" && "mode" in message) {
+        tracked.add(this);
+        (window as unknown as { __splitWorkerPosted: boolean }).__splitWorkerPosted = true;
+      }
       return Reflect.apply(postMessage, this, [message, transfer]);
     } });
     prototype.terminate = function () {
-      (window as unknown as { __splitWorkerTerminated: boolean }).__splitWorkerTerminated = true;
+      if (tracked.has(this)) (window as unknown as { __splitWorkerTerminated: boolean }).__splitWorkerTerminated = true;
       return terminate.call(this);
     };
   });
@@ -398,14 +590,18 @@ test("leaving the Split PDF route terminates its active worker", async ({ page }
     const prototype = Worker.prototype;
     const postMessage = prototype.postMessage;
     const terminate = prototype.terminate;
+    const tracked = new WeakSet<Worker>();
     Object.defineProperty(window, "__splitWorkerPosted", { value: false, writable: true });
     Object.defineProperty(window, "__splitWorkerTerminated", { value: false, writable: true });
     Object.defineProperty(prototype, "postMessage", { value: function (this: Worker, message: unknown, transfer?: Transferable[]) {
-      (window as unknown as { __splitWorkerPosted: boolean }).__splitWorkerPosted = true;
+      if (message && typeof message === "object" && "mode" in message) {
+        tracked.add(this);
+        (window as unknown as { __splitWorkerPosted: boolean }).__splitWorkerPosted = true;
+      }
       return Reflect.apply(postMessage, this, [message, transfer]);
     } });
     prototype.terminate = function () {
-      (window as unknown as { __splitWorkerTerminated: boolean }).__splitWorkerTerminated = true;
+      if (tracked.has(this)) (window as unknown as { __splitWorkerTerminated: boolean }).__splitWorkerTerminated = true;
       return terminate.call(this);
     };
   });
@@ -461,8 +657,8 @@ test("split rejects invalid ranges without exposing output links", async ({ page
   await page.goto("/tools/split-pdf");
   await page.locator('input[type="file"]').setInputFiles({ name: "report.pdf", mimeType: "application/pdf", buffer: Buffer.from(await source.save()) });
   await page.getByLabel("Page ranges").fill("2");
-  await page.getByRole("button", { name: "Split PDF" }).click();
   await expect(page.locator(".merge-error")).toContainText("outside this document");
+  await expect(page.getByRole("button", { name: "Split PDF" })).toBeDisabled();
   await expect(page.locator(".merge-success a")).toHaveCount(0);
 });
 
@@ -473,8 +669,6 @@ test("split rejects empty and corrupt PDF inputs without downloads", async ({ pa
   await expect(page.locator(".merge-error")).toContainText("empty");
   const corrupt = Buffer.from("%PDF-1.7 this is not a parseable PDF");
   await picker.setInputFiles({ name: "corrupt.pdf", mimeType: "application/pdf", buffer: corrupt });
-  await page.getByLabel("Page ranges").fill("1");
-  await page.getByRole("button", { name: "Split PDF" }).click();
   await expect(page.locator(".merge-error")).toContainText("could not be opened");
   await expect(page.locator(".merge-success a")).toHaveCount(0);
 });
@@ -486,30 +680,38 @@ test("rotate preserves page order and downloads the selected rotation", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/tools/rotate-pdf");
   await page.locator('input[type="file"]').setInputFiles({ name: "diagram.pdf", mimeType: "application/pdf", buffer: fixture });
-  await page.getByRole("checkbox", { name: "Rotate all pages" }).uncheck();
-  await page.getByLabel("Pages to rotate").fill("2");
+  await page.getByLabel("Rotation").waitFor({ timeout: 20000 });
+  await page.getByRole("button", { name: "Page 2" }).click();
   await page.getByLabel("Rotation").selectOption("270");
+  await page.getByRole("button", { name: "Rotate selected pages" }).click();
+  await expect(page.getByRole("button", { name: /Page 2, 270 degrees/ })).toBeVisible();
   const a11y = await new AxeBuilder({ page }).analyze();
   expect(a11y.violations).toEqual([]);
-  await page.getByRole("button", { name: "Rotate PDF" }).click();
-  await expect(page.getByRole("link", { name: "Download rotated PDF" })).toBeVisible();
+  await page.getByRole("button", { name: "Create rotated PDF" }).click();
+  await expect(page.getByRole("link", { name: "diagram-rotated.pdf" })).toBeVisible({ timeout: 30000 });
   const downloadEvent = page.waitForEvent("download");
-  await page.getByRole("link", { name: "Download rotated PDF" }).click();
+  await page.getByRole("link", { name: "diagram-rotated.pdf" }).click();
   const download = await downloadEvent;
   expect(download.suggestedFilename()).toBe("diagram-rotated.pdf");
   const stream = await download.createReadStream();
   const chunks: Buffer[] = [];
   for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
-  const output = await PDFDocument.load(Buffer.concat(chunks));
+  const downloadedBytes = Buffer.concat(chunks);
+  const output = await PDFDocument.load(downloadedBytes);
   expect(output.getPages().map((pdfPage) => pdfPage.getRotation().angle)).toEqual([0, 270]);
   expect(output.getPages().map((pdfPage) => pdfPage.getSize())).toEqual([{ width: 300, height: 400 }, { width: 500, height: 600 }]);
+  await validatePdfWithPdfJs(new Uint8Array(downloadedBytes), {
+    expectedPageCount: 2,
+    expectedRotations: { 1: 0, 2: 270 },
+    expectedSizes: [{ width: 300, height: 400 }, { width: 600, height: 500 }],
+  });
 });
 
 test("rotate rejects files without a PDF signature", async ({ page }) => {
   await page.goto("/tools/rotate-pdf");
   await page.locator('input[type="file"]').setInputFiles({ name: "notes.pdf", mimeType: "application/pdf", buffer: Buffer.from("not a PDF") });
   await expect(page.locator(".merge-error")).toContainText("does not have a PDF signature");
-  await expect(page.getByRole("button", { name: "Rotate PDF" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Create rotated PDF" })).toBeDisabled();
 });
 
 test("rotate cancellation terminates its worker without a partial result", async ({ page }) => {
@@ -517,14 +719,18 @@ test("rotate cancellation terminates its worker without a partial result", async
     const prototype = Worker.prototype;
     const postMessage = prototype.postMessage;
     const terminate = prototype.terminate;
+    const tracked = new WeakSet<Worker>();
     Object.defineProperty(window, "__rotateWorkerPosted", { value: false, writable: true });
     Object.defineProperty(window, "__rotateWorkerTerminated", { value: false, writable: true });
     Object.defineProperty(prototype, "postMessage", { value: function (this: Worker, message: unknown, transfer?: Transferable[]) {
-      (window as unknown as { __rotateWorkerPosted: boolean }).__rotateWorkerPosted = true;
+      if (message && typeof message === "object" && "rotations" in message) {
+        tracked.add(this);
+        (window as unknown as { __rotateWorkerPosted: boolean }).__rotateWorkerPosted = true;
+      }
       return Reflect.apply(postMessage, this, [message, transfer]);
     } });
     prototype.terminate = function () {
-      (window as unknown as { __rotateWorkerTerminated: boolean }).__rotateWorkerTerminated = true;
+      if (tracked.has(this)) (window as unknown as { __rotateWorkerTerminated: boolean }).__rotateWorkerTerminated = true;
       return terminate.call(this);
     };
   });
@@ -532,12 +738,13 @@ test("rotate cancellation terminates its worker without a partial result", async
   for (let pageIndex = 0; pageIndex < 500; pageIndex += 1) pdf.addPage([300, 400]);
   await page.goto("/tools/rotate-pdf");
   await page.locator('input[type="file"]').setInputFiles({ name: "pages.pdf", mimeType: "application/pdf", buffer: Buffer.from(await pdf.save()) });
-  await page.getByRole("button", { name: "Rotate PDF" }).click();
+  await page.getByRole("button", { name: "Rotate all pages" }).click({ timeout: 30000 });
+  await page.getByRole("button", { name: "Create rotated PDF" }).click();
   await page.waitForFunction(() => (window as unknown as { __rotateWorkerPosted: boolean }).__rotateWorkerPosted);
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(page.locator(".merge-error")).toContainText("Rotation cancelled");
   expect(await page.evaluate(() => (window as unknown as { __rotateWorkerTerminated: boolean }).__rotateWorkerTerminated)).toBe(true);
-  await expect(page.getByRole("link", { name: "Download rotated PDF" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "pages-rotated.pdf" })).toHaveCount(0);
 });
 
 test("rotate releases the generated URL when its route unmounts", async ({ page }) => {
@@ -553,13 +760,180 @@ test("rotate releases the generated URL when its route unmounts", async ({ page 
   const pdf = await PDFDocument.create(); pdf.addPage([300, 400]);
   await page.goto("/tools/rotate-pdf");
   await page.locator('input[type="file"]').setInputFiles({ name: "one.pdf", mimeType: "application/pdf", buffer: Buffer.from(await pdf.save()) });
-  await page.getByRole("button", { name: "Rotate PDF" }).click();
-  await expect(page.getByRole("link", { name: "Download rotated PDF" })).toBeVisible();
+  await page.getByRole("button", { name: "Rotate all pages" }).click({ timeout: 30000 });
+  await page.getByRole("button", { name: "Create rotated PDF" }).click();
+  await expect(page.getByRole("link", { name: "one-rotated.pdf" })).toBeVisible({ timeout: 30000 });
   const created = await page.evaluate(() => (window as unknown as { __rotateObjectUrls: { created: string[] } }).__rotateObjectUrls.created[0]);
   await page.getByRole("link", { name: "APOS workspace" }).click();
   await expect(page).toHaveURL(/\/$/);
   const revoked = await page.evaluate(() => (window as unknown as { __rotateObjectUrls: { revoked: string[] } }).__rotateObjectUrls.revoked);
   expect(revoked).toContain(created);
+});
+
+test("merge preserves mixed portrait, landscape, image and rotated pages", async ({ page }) => {
+  const mixed = await makeMixedPdf();
+  const second = await PDFDocument.create();
+  const font = await second.embedFont(StandardFonts.Helvetica);
+  second.addPage([250, 500]).drawText("Second document", { x: 24, y: 430, size: 14, font });
+  await page.goto("/tools/merge-pdf");
+  await page.locator('input[type="file"]').setInputFiles([
+    { name: "mixed.pdf", mimeType: "application/pdf", buffer: mixed },
+    { name: "second.pdf", mimeType: "application/pdf", buffer: Buffer.from(await second.save()) },
+  ]);
+  await expect(page.locator(".pdf-summary-row")).toContainText("5 pages", { timeout: 30000 });
+  await page.getByRole("button", { name: "Merge PDFs" }).click();
+  const link = page.getByRole("link", { name: "merged.pdf" });
+  await expect(link).toBeVisible({ timeout: 30000 });
+  const event = page.waitForEvent("download");
+  await link.click();
+  const download = await event;
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+  const result = await validatePdfWithPdfJs(new Uint8Array(Buffer.concat(chunks)), {
+    expectedPageCount: 5,
+    expectedSizes: [
+      { width: 300, height: 400 },
+      { width: 500, height: 300 },
+      { width: 320, height: 480 },
+      { width: 350, height: 600 },
+      { width: 250, height: 500 },
+    ],
+    expectedText: { 1: ["Portrait page"], 2: ["Landscape page"], 4: ["Rotated source page"], 5: ["Second document"] },
+    minImages: { 3: 1 },
+  });
+  expect(result.pages[3].rotation).toBe(90);
+});
+
+test("rotate accumulates an existing rotation on a landscape page", async ({ page }) => {
+  await page.goto("/tools/rotate-pdf");
+  await page.locator('input[type="file"]').setInputFiles({ name: "mixed.pdf", mimeType: "application/pdf", buffer: await makeMixedPdf() });
+  await page.getByLabel("Rotation").waitFor({ timeout: 20000 });
+  await page.getByRole("button", { name: /Page 4/ }).click();
+  await page.getByLabel("Rotation").selectOption("90");
+  await page.getByRole("button", { name: "Rotate selected pages" }).click();
+  await page.getByRole("button", { name: "Create rotated PDF" }).click();
+  const link = page.getByRole("link", { name: "mixed-rotated.pdf" });
+  await expect(link).toBeVisible({ timeout: 30000 });
+  const event = page.waitForEvent("download");
+  await link.click();
+  const download = await event;
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+  await validatePdfWithPdfJs(new Uint8Array(Buffer.concat(chunks)), {
+    expectedPageCount: 4,
+    expectedRotations: { 4: 180 },
+    expectedSizes: [
+      { width: 300, height: 400 },
+      { width: 500, height: 300 },
+      { width: 320, height: 480 },
+      { width: 600, height: 350 },
+    ],
+    expectedText: { 4: ["Rotated source page"] },
+    minImages: { 3: 1 },
+  });
+});
+
+test("watermark preserves mixed geometry and places text on a rotated page", async ({ page }) => {
+  await page.goto("/tools/pdf-watermark");
+  await page.locator('input[type="file"]').setInputFiles({ name: "mixed.pdf", mimeType: "application/pdf", buffer: await makeMixedPdf() });
+  await page.getByLabel("Pages to update").waitFor({ timeout: 20000 });
+  await page.getByLabel("Pages to update").fill("1,2,4");
+  await page.getByLabel("Watermark text").fill("MIXED MARK");
+  await page.getByLabel("Position").selectOption("bottom-left");
+  await page.getByRole("button", { name: "Add watermark" }).click();
+  const link = page.getByRole("link", { name: "mixed-watermarked.pdf" });
+  await expect(link).toBeVisible({ timeout: 30000 });
+  const bytes = await page.evaluate(async (href) => new Uint8Array(await (await fetch(href!)).arrayBuffer()), await link.getAttribute("href"));
+  await validatePdfWithPdfJs(bytes, {
+    expectedPageCount: 4,
+    expectedRotations: { 4: 90 },
+    expectedText: { 1: ["MIXED MARK"], 2: ["MIXED MARK"], 4: ["MIXED MARK"] },
+    textPlacement: [
+      { page: 1, text: "MIXED", horizontal: "left", vertical: "bottom" },
+      { page: 4, text: "MIXED", horizontal: "left", vertical: "bottom" },
+    ],
+    minImages: { 3: 1 },
+  });
+});
+
+test("page numbers respect mixed geometry and skip the cover", async ({ page }) => {
+  await page.goto("/tools/pdf-page-numbers");
+  await page.locator('input[type="file"]').setInputFiles({ name: "mixed.pdf", mimeType: "application/pdf", buffer: await makeMixedPdf() });
+  await page.getByLabel("Pages to update").waitFor({ timeout: 20000 });
+  await page.getByLabel("Skip first page").check();
+  await page.getByLabel("Prefix").fill("N");
+  await page.getByLabel("Position").selectOption("bottom-left");
+  await page.getByRole("button", { name: "Add page numbers" }).click();
+  const link = page.getByRole("link", { name: "mixed-numbered.pdf" });
+  await expect(link).toBeVisible({ timeout: 30000 });
+  const bytes = await page.evaluate(async (href) => new Uint8Array(await (await fetch(href!)).arrayBuffer()), await link.getAttribute("href"));
+  const result = await validatePdfWithPdfJs(bytes, {
+    expectedPageCount: 4,
+    expectedRotations: { 4: 90 },
+    expectedText: { 2: ["N1"], 3: ["N2"], 4: ["N3"] },
+    textPlacement: [
+      { page: 2, text: "N1", horizontal: "left", vertical: "bottom" },
+      { page: 4, text: "N3", horizontal: "left", vertical: "bottom" },
+    ],
+    minImages: { 3: 1 },
+  });
+  expect(result.pages[0].text).not.toContain("N1");
+});
+
+test("PDF Essentials operations transmit no document contents to the server", async ({ page }) => {
+  const requests: { url: string; method: string; postData: string | null }[] = [];
+  page.on("request", (request) => {
+    let postData: string | null = null;
+    try { postData = request.postData(); } catch { postData = null; }
+    requests.push({ url: request.url(), method: request.method(), postData });
+  });
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  pdf.addPage([300, 400]).drawText("APOS_SECRET_DOCUMENT_TEXT_42", { x: 20, y: 300, size: 12, font });
+  const fixture = Buffer.from(await pdf.save());
+  const waitForLink = async (name: string) => expect(page.getByRole("link", { name })).toBeVisible({ timeout: 30000 });
+
+  await page.goto("/tools/merge-pdf");
+  await page.locator('input[type="file"]').setInputFiles([
+    { name: "secret-a.pdf", mimeType: "application/pdf", buffer: fixture },
+    { name: "secret-b.pdf", mimeType: "application/pdf", buffer: fixture },
+  ]);
+  await page.getByRole("button", { name: "Merge PDFs" }).click();
+  await waitForLink("merged.pdf");
+
+  await page.goto("/tools/split-pdf");
+  await page.locator('input[type="file"]').setInputFiles({ name: "secret.pdf", mimeType: "application/pdf", buffer: fixture });
+  await page.getByLabel("Page ranges").fill("1");
+  await page.getByRole("button", { name: "Split PDF" }).click();
+  await waitForLink("secret-pages-1-1.pdf");
+
+  await page.goto("/tools/rotate-pdf");
+  await page.locator('input[type="file"]').setInputFiles({ name: "secret.pdf", mimeType: "application/pdf", buffer: fixture });
+  await page.getByRole("button", { name: "Rotate all pages" }).click({ timeout: 30000 });
+  await page.getByRole("button", { name: "Create rotated PDF" }).click();
+  await waitForLink("secret-rotated.pdf");
+
+  await page.goto("/tools/pdf-watermark");
+  await page.locator('input[type="file"]').setInputFiles({ name: "secret.pdf", mimeType: "application/pdf", buffer: fixture });
+  await page.getByLabel("Watermark text").fill("SECRET_MARK");
+  await page.getByRole("button", { name: "Add watermark" }).click();
+  await waitForLink("secret-watermarked.pdf");
+
+  await page.goto("/tools/pdf-page-numbers");
+  await page.locator('input[type="file"]').setInputFiles({ name: "secret.pdf", mimeType: "application/pdf", buffer: fixture });
+  await page.getByRole("button", { name: "Add page numbers" }).click();
+  await waitForLink("secret-numbered.pdf");
+
+  expect(requests.filter((request) => request.url.includes("/api/"))).toEqual([]);
+  expect(requests.filter((request) => request.url.includes("APOS_SECRET_DOCUMENT_TEXT_42"))).toEqual([]);
+  expect(requests.filter((request) => request.postData?.includes("APOS_SECRET_DOCUMENT_TEXT_42"))).toEqual([]);
+  expect(requests.filter((request) => request.postData?.includes("%PDF-"))).toEqual([]);
+  expect(requests.filter((request) => request.postData?.includes("SECRET_MARK"))).toEqual([]);
+  // The only external requests are static Google Fonts GETs; no external
+  // request carries a document body.
+  expect(requests.filter((request) => /^https?:/.test(request.url) && !request.url.startsWith("http://localhost:3000/") && request.postData)).toEqual([]);
 });
 
 test("page organization tools produce the requested real page outputs", async ({ page }) => {
@@ -756,28 +1130,27 @@ test("compress rewrites a mixed PDF and downloads the measured validated output"
 
 test("compress cancellation terminates its worker and exposes no partial result", async ({ page }) => {
   await page.addInitScript(() => {
-    const active = new WeakSet<Worker>();
-    const prototype = Worker.prototype;
-    const postMessage = prototype.postMessage;
-    const terminate = prototype.terminate;
+    const NativeWorker = Worker;
     Object.defineProperty(window, "__compressWorkerPosted", { value: false, writable: true });
     Object.defineProperty(window, "__compressWorkerTerminated", { value: false, writable: true });
-    Object.defineProperty(prototype, "postMessage", { value: function (this: Worker, message: unknown, transfer?: Transferable[]) {
-      if (message && typeof message === "object" && "file" in message) {
-        active.add(this);
-        (window as unknown as { __compressWorkerPosted: boolean }).__compressWorkerPosted = true;
+    window.Worker = class extends NativeWorker {
+      postMessage(message: unknown, transfer?: Transferable[] | StructuredSerializeOptions) {
+        if (message && typeof message === "object" && "file" in message) {
+          (window as unknown as { __compressWorkerPosted: boolean }).__compressWorkerPosted = true;
+        }
+        return super.postMessage(message, transfer as Transferable[]);
       }
-      return Reflect.apply(postMessage, this, [message, transfer]);
-    } });
-    prototype.terminate = function () {
-      if (active.has(this)) (window as unknown as { __compressWorkerTerminated: boolean }).__compressWorkerTerminated = true;
-      return terminate.call(this);
-    };
+      terminate() {
+        (window as unknown as { __compressWorkerTerminated: boolean }).__compressWorkerTerminated = true;
+        return super.terminate();
+      }
+    } as typeof Worker;
   });
   const source = await PDFDocument.create();
   for (let index = 0; index < 500; index += 1) source.addPage([300, 400]);
   await page.goto("/tools/compress-pdf");
   await page.locator('input[type="file"]').setInputFiles({ name: "many-pages.pdf", mimeType: "application/pdf", buffer: Buffer.from(await source.save()) });
+  await page.getByLabel("Compression method").selectOption("structure");
   await page.getByRole("button", { name: "Compress PDF" }).click();
   await page.waitForFunction(() => (window as unknown as { __compressWorkerPosted: boolean }).__compressWorkerPosted);
   await page.getByRole("button", { name: "Cancel" }).click();
@@ -812,7 +1185,7 @@ test("compress rejects corrupt PDF structures without exposing a result", async 
   await page.goto("/tools/compress-pdf");
   await page.locator('input[type="file"]').setInputFiles({ name: "broken.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.7 malformed structure") });
   await page.getByRole("button", { name: "Compress PDF" }).click();
-  await expect(page.locator(".merge-error")).toContainText("could not be opened");
+  await expect(page.locator(".merge-error")).toContainText("Unable to read the selected file");
   await expect(page.getByRole("link", { name: "Download rewritten PDF" })).toHaveCount(0);
 });
 
@@ -1003,8 +1376,8 @@ test("Images to PDF cancellation terminates its worker and invalid images are re
   await expect(page.locator(".merge-error")).toContainText("not a supported");
   const malformed = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.from("malformed")]);
   await page.getByLabel("Choose JPG or PNG images").setInputFiles({ name: "corrupt.png", mimeType: "image/png", buffer: malformed });
-  await page.getByRole("button", { name: "Create PDF" }).click();
   await expect(page.locator(".merge-error")).toBeVisible({ timeout: 10000 });
+  await expect(page.locator(".merge-error")).toContainText("could not be decoded");
   await expect(page.getByRole("link", { name: /Download validated PDF/ })).toHaveCount(0);
   const png = await page.evaluate(() => { const canvas = document.createElement("canvas"); canvas.width = 1000; canvas.height = 1000; return canvas.toDataURL("image/png").split(",")[1]; });
   await page.getByLabel("Choose JPG or PNG images").setInputFiles({ name: "good.png", mimeType: "image/png", buffer: Buffer.from(png, "base64") });
@@ -1042,27 +1415,42 @@ test("PDF watermark applies selected text and image marks with real validated ou
   const pdf = await PDFDocument.create(); pdf.addPage([300, 400]); pdf.addPage([500, 600]);
   await page.goto("/tools/pdf-watermark");
   await page.getByLabel("Choose a PDF").setInputFiles({ name: "mark.pdf", mimeType: "application/pdf", buffer: Buffer.from(await pdf.save()) });
+  await page.getByLabel("Pages to update").waitFor({ timeout: 20000 });
   await page.getByLabel("Pages to update").fill("2");
   await page.getByLabel("Watermark text").fill("CONFIDENTIAL");
   await page.getByLabel("Position").selectOption("top-right");
   await page.getByLabel("Rotation (degrees)").fill("45");
   await page.getByLabel("Opacity").fill("0.4");
   await page.getByLabel("Font size").fill("24");
+  await expect(page.locator(".pdf-page-preview img")).toBeVisible({ timeout: 20000 });
+  await expect(page.getByLabel("Text color")).toBeVisible();
+  await expect(page.getByLabel("Horizontal alignment")).toBeVisible();
+  await expect(page.getByLabel("Vertical alignment")).toBeVisible();
+  await expect(page.getByLabel("Scale (% of page width)")).toBeVisible();
   await page.getByRole("button", { name: "Add watermark" }).focus(); await page.keyboard.press("Enter");
-  const link = page.getByRole("link", { name: "Download validated PDF" }); await expect(link).toBeVisible({ timeout: 20000 });
+  const link = page.getByRole("link", { name: "mark-watermarked.pdf" }); await expect(link).toBeVisible({ timeout: 20000 });
   const bytes = await page.evaluate(async (href) => new Uint8Array(await (await fetch(href!)).arrayBuffer()), await link.getAttribute("href"));
   const checked = await PDFDocument.load(bytes);
   expect(checked.getPageCount()).toBe(2);
   expect(checked.getPage(0).extractContents().filter((asset) => asset.kind === "text")).toHaveLength(0);
   expect(checked.getPage(1).extractContents().some((asset) => asset.kind === "text" && asset.getText().includes("CONFIDENTIAL"))).toBe(true);
+  await validatePdfWithPdfJs(bytes, {
+    expectedPageCount: 2,
+    expectedText: { 2: ["CONFIDENTIAL"] },
+    textPlacement: [{ page: 2, text: "CONFIDENTIAL", horizontal: "right", vertical: "top" }],
+  });
   const axe = await new AxeBuilder({ page }).analyze(); expect(axe.violations).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  const png = await page.evaluate(() => { const canvas = document.createElement("canvas"); canvas.width = 2; canvas.height = 2; return canvas.toDataURL("image/png").split(",")[1]; });
-  await page.getByLabel("Optional PNG/JPG watermark image").setInputFiles({ name: "logo.png", mimeType: "image/png", buffer: Buffer.from(png, "base64") });
+  const png = await page.evaluate(() => { const canvas = document.createElement("canvas"); canvas.width = 8; canvas.height = 4; return canvas.toDataURL("image/png").split(",")[1]; });
+  await page.getByLabel("Image watermark").check();
+  await page.getByLabel("PNG or JPEG watermark image").setInputFiles({ name: "logo.png", mimeType: "image/png", buffer: Buffer.from(png, "base64") });
   await page.getByRole("button", { name: "Add watermark" }).click(); await expect(link).toBeVisible({ timeout: 20000 });
   const imageBytes = await page.evaluate(async (href) => new Uint8Array(await (await fetch(href!)).arrayBuffer()), await link.getAttribute("href"));
   const imageMarked = await PDFDocument.load(imageBytes);
-  expect(imageMarked.getPage(1).extractContents().some((asset) => asset.kind === "image")).toBe(true);
+  const imageAsset = imageMarked.getPage(1).extractContents().find((asset) => asset.kind === "image");
+  expect(imageAsset?.kind).toBe("image");
+  if (imageAsset?.kind === "image") expect(imageAsset.drawWidth / imageAsset.drawHeight).toBeCloseTo(2, 1);
+  await validatePdfWithPdfJs(imageBytes, { expectedPageCount: 2, minImages: { 2: 1 } });
   const finalUrl = await link.getAttribute("href");
   await page.getByRole("link", { name: /PDF Essentials/ }).click(); await expect(page).toHaveURL(/\/studios\/pdf-essentials/);
   const revoked = await page.evaluate(() => JSON.parse(sessionStorage.getItem("apos-revoked-watermark-urls") ?? "[]") as string[]);
@@ -1074,17 +1462,85 @@ test("PDF page numbering honors start, selected pages, template, placement and d
   const pdf = await PDFDocument.create(); pdf.addPage([300, 400]); pdf.addPage([500, 600]); pdf.addPage([700, 800]);
   await page.goto("/tools/pdf-page-numbers");
   await page.getByLabel("Choose a PDF").setInputFiles({ name: "pages.pdf", mimeType: "application/pdf", buffer: Buffer.from(await pdf.save()) });
+  await page.getByLabel("Pages to update").waitFor({ timeout: 20000 });
   await page.getByLabel("Pages to update").fill("2-3");
   await page.getByLabel("Starting number").fill("7");
-  await page.getByLabel("Number format").fill("Sheet {n}");
+  await page.getByLabel("Prefix").fill("Sheet ");
+  await page.getByLabel("Alignment").selectOption("right");
+  await expect(page.getByLabel("Position")).toHaveValue("bottom-right");
   await page.getByLabel("Position").selectOption("bottom-left");
+  await expect(page.locator(".pdf-page-preview img")).toBeVisible({ timeout: 20000 });
+  await expect(page.getByLabel("Text color")).toBeVisible();
   await page.getByRole("button", { name: "Add page numbers" }).focus(); await page.keyboard.press("Enter");
-  const link = page.getByRole("link", { name: "Download validated PDF" }); await expect(link).toBeVisible({ timeout: 20000 });
+  const link = page.getByRole("link", { name: "pages-numbered.pdf" }); await expect(link).toBeVisible({ timeout: 20000 });
   const bytes = await page.evaluate(async (href) => new Uint8Array(await (await fetch(href!)).arrayBuffer()), await link.getAttribute("href"));
   const checked = await PDFDocument.load(bytes); const text = (index: number) => checked.getPage(index).extractContents().filter((asset) => asset.kind === "text").map((asset) => asset.kind === "text" ? asset.getText() : "").join(" ");
   expect(text(0)).toBe(""); expect(text(1)).toContain("Sheet 7"); expect(text(2)).toContain("Sheet 8");
+  await validatePdfWithPdfJs(bytes, {
+    expectedPageCount: 3,
+    expectedText: { 2: ["Sheet 7"], 3: ["Sheet 8"] },
+    textPlacement: [{ page: 2, text: "Sheet", horizontal: "left", vertical: "bottom" }],
+  });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   const axe = await new AxeBuilder({ page }).analyze(); expect(axe.violations).toEqual([]);
+});
+
+test("PDF page numbering supports skip-cover and padded formatting", async ({ page }) => {
+  const pdf = await PDFDocument.create(); pdf.addPage([300, 400]); pdf.addPage([500, 600]); pdf.addPage([700, 800]);
+  await page.goto("/tools/pdf-page-numbers");
+  await page.getByLabel("Choose a PDF").setInputFiles({ name: "padded.pdf", mimeType: "application/pdf", buffer: Buffer.from(await pdf.save()) });
+  await page.getByLabel("Pages to update").waitFor({ timeout: 20000 });
+  await page.getByLabel("Skip first page").check();
+  await page.getByLabel("Numbering format").selectOption("padded");
+  await page.getByLabel("Prefix").fill("Page ");
+  await page.getByRole("button", { name: "Add page numbers" }).click();
+  const link = page.getByRole("link", { name: "padded-numbered.pdf" });
+  await expect(link).toBeVisible({ timeout: 20000 });
+  const bytes = await page.evaluate(async (href) => new Uint8Array(await (await fetch(href!)).arrayBuffer()), await link.getAttribute("href"));
+  const checked = await PDFDocument.load(bytes);
+  const text = (index: number) => checked.getPage(index).extractContents().filter((asset) => asset.kind === "text").map((asset) => asset.kind === "text" ? asset.getText() : "").join(" ");
+  expect(text(0)).toBe("");
+  expect(text(1)).toContain("Page 01");
+  expect(text(2)).toContain("Page 02");
+  await validatePdfWithPdfJs(bytes, {
+    expectedPageCount: 3,
+    expectedText: { 2: ["Page 01"], 3: ["Page 02"] },
+  });
+});
+
+test("PDF Essentials tools render without dark-theme accessibility or overflow regressions", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const pdf = await PDFDocument.create(); pdf.addPage([300, 400]);
+  const fixture = Buffer.from(await pdf.save());
+  for (const route of ["merge-pdf", "split-pdf", "rotate-pdf", "pdf-watermark", "pdf-page-numbers"]) {
+    await page.goto(`/tools/${route}`);
+    await page.locator('input[type="file"]').setInputFiles({ name: `${route}.pdf`, mimeType: "application/pdf", buffer: fixture });
+    if (route === "merge-pdf") await expect(page.locator(".pdf-merge-copy")).toContainText("1 page", { timeout: 20000 });
+    else await expect(page.locator(".pdf-file-summary")).toContainText("1 page", { timeout: 20000 });
+    if (await page.locator("html").getAttribute("data-theme") !== "dark") {
+      await page.getByRole("button", { name: "Switch to dark theme" }).click();
+    }
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations).toEqual([]);
+  }
+  await page.getByRole("button", { name: "Switch to light theme" }).click();
+});
+
+test("PDF Essentials tools render at desktop dimensions without overflow", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const pdf = await PDFDocument.create(); pdf.addPage([300, 400]);
+  const fixture = Buffer.from(await pdf.save());
+  for (const route of ["merge-pdf", "split-pdf", "rotate-pdf", "pdf-watermark", "pdf-page-numbers"]) {
+    await page.goto(`/tools/${route}`);
+    await page.locator('input[type="file"]').setInputFiles({ name: `${route}.pdf`, mimeType: "application/pdf", buffer: fixture });
+    if (route === "merge-pdf") await expect(page.locator(".pdf-merge-copy")).toContainText("1 page", { timeout: 20000 });
+    else await expect(page.locator(".pdf-file-summary")).toContainText("1 page", { timeout: 20000 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations).toEqual([]);
+  }
 });
 
 test("PDF watermark worker cancellation terminates processing and exposes no partial result", async ({ page }) => {
@@ -1101,7 +1557,35 @@ test("PDF watermark worker cancellation terminates processing and exposes no par
   await page.waitForFunction(() => (window as unknown as { __markLifecycle: { posted: boolean } }).__markLifecycle.posted);
   await page.getByRole("button", { name: "Cancel" }).click();
   expect(await page.evaluate(() => (window as unknown as { __markLifecycle: { terminated: boolean } }).__markLifecycle.terminated)).toBe(true);
-  await expect(page.getByRole("link", { name: "Download validated PDF" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "cancel-watermarked.pdf" })).toHaveCount(0);
+});
+
+test("PDF page numbering worker cancellation terminates processing and exposes no partial result", async ({ page }) => {
+  await page.addInitScript(() => {
+    const tracked = new WeakSet<Worker>(); const post = Worker.prototype.postMessage; const terminate = Worker.prototype.terminate;
+    Object.defineProperty(window, "__pageNumberLifecycle", { value: { posted: false, terminated: false } });
+    Object.defineProperty(Worker.prototype, "postMessage", { value: function (...args: unknown[]) {
+      const [message] = args;
+      if (message && typeof message === "object" && "options" in message) {
+        tracked.add(this);
+        (window as unknown as { __pageNumberLifecycle: { posted: boolean } }).__pageNumberLifecycle.posted = true;
+      }
+      return Reflect.apply(post, this, args);
+    } });
+    Worker.prototype.terminate = function () {
+      if (tracked.has(this)) (window as unknown as { __pageNumberLifecycle: { terminated: boolean } }).__pageNumberLifecycle.terminated = true;
+      return terminate.call(this);
+    };
+  });
+  const pdf = await PDFDocument.create();
+  for (let index = 0; index < 450; index += 1) pdf.addPage([300, 400]);
+  await page.goto("/tools/pdf-page-numbers");
+  await page.getByLabel("Choose a PDF").setInputFiles({ name: "cancel-numbering.pdf", mimeType: "application/pdf", buffer: Buffer.from(await pdf.save()) });
+  await page.getByRole("button", { name: "Add page numbers" }).click();
+  await page.waitForFunction(() => (window as unknown as { __pageNumberLifecycle: { posted: boolean } }).__pageNumberLifecycle.posted);
+  await page.getByRole("button", { name: "Cancel" }).click();
+  expect(await page.evaluate(() => (window as unknown as { __pageNumberLifecycle: { terminated: boolean } }).__pageNumberLifecycle.terminated)).toBe(true);
+  await expect(page.getByRole("link", { name: "cancel-numbering-numbered.pdf" })).toHaveCount(0);
 });
 
 test("PDF metadata can be inspected, edited and downloaded with supported fields verified", async ({ page }) => {
@@ -1240,7 +1724,7 @@ test("dashboard has no automated accessibility violations", async ({ page }) => 
 test("Edit PDF uploads, annotates, downloads a flattened copy and retains content", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/tools/edit-pdf");
-  await expect(page.getByText("In Development · PDF viewer")).toBeVisible();
+  await expect(page.getByText("Available · text editing in the browser")).toBeVisible();
 
   const source = await PDFDocument.create();
   const font = await source.embedFont(StandardFonts.Helvetica);

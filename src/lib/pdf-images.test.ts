@@ -9,7 +9,7 @@ describe("PDF image export validation and resource limits", () => {
     expect(() => selectedImagePages("", 3)).toThrow();
     expect(() => selectedImagePages("1,1", 3)).toThrow();
     expect(() => selectedImagePages("4", 3)).toThrow();
-    expect(() => selectedImagePages(Array.from({ length: 21 }, (_, index) => String(index + 1)).join(","), 21)).toThrow("no more than 20 pages");
+    expect(() => selectedImagePages(Array.from({ length: 501 }, (_, index) => String(index + 1)).join(","), 501)).toThrow("no more than 500 pages");
   });
   it("checks PNG and JPEG signatures", () => {
     expect(() => validateRenderedImage(Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), "png")).not.toThrow();

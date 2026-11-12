@@ -7,7 +7,7 @@ workerScope.onmessage = (event) => {
   const inputs = event.data.files;
   let output: Uint8Array | null = null;
   try {
-    if (!Array.isArray(inputs) || inputs.length < 1 || inputs.length > 20) throw new Error("Invalid archive file count.");
+    if (!Array.isArray(inputs) || inputs.length < 1 || inputs.length > 500) throw new Error("Invalid archive file count.");
     const entries: Record<string, Uint8Array> = Object.create(null) as Record<string, Uint8Array>;
     const names = new Set<string>();
     let totalBytes = 0;

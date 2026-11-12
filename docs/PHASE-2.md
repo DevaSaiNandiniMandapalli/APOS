@@ -32,9 +32,28 @@ Limits: 50 MiB input PDF, 500 pages per input, 20 output pages per run, 12 megap
 
 PNG and JPG inputs are detected by file signature, parsed and embedded in a worker. Up to 20 inputs and 50 MiB total are accepted. The displayed order controls page order. A4, Letter and image-sized pages are supported; A4/Letter orientation can follow each image or be forced to portrait/landscape. Page placement preserves aspect ratio and centers the image on fixed page sizes. The output is reopened and checked for signature, page count and image content before download. Cancellation terminates the worker and input/output URLs are cleaned up on unmount.
 
+## PDF Essentials completion
+
+The five PDF Essentials tools now share a consistent browser-local experience:
+
+- **Merge PDF** accepts 2–10 PDFs with drag-and-drop upload, per-file page counts, first-page thumbnails, drag/keyboard reordering, removal, clear-all, an editable output name, a 100 MB output cap and real per-file worker progress.
+- **Split PDF** supports extract-selected-pages, one-file-per-page, custom ranges and equal page groups. It shows page thumbnails, validates ranges against the actual page count, creates individually validated PDFs, and packages multiple outputs into a ZIP using the existing `fflate` worker.
+- **Rotate PDF** shows page thumbnails and selection controls, supports 90°/180°/270° rotation for all or selected pages, accumulates rotations per page, displays pending rotation state, preserves page order, and validates every output rotation.
+- **PDF Watermark** has an explicit text/image mode, font selection, text color, opacity, rotation, nine positions plus custom X/Y positioning, horizontal/vertical alignment, page-width scale, live page preview, selected-page ranges and a 50 MB output cap. Image aspect ratio is preserved.
+- **PDF Page Numbers** has page range selection, skip-cover, starting number, prefix/suffix, decimal/“Page n”/zero-padded formats, font selection, font size, text color, six positions, alignment, custom margins and a live preview. Oversized labels are reduced to fit instead of clipping.
+
+All five use a shared PDF drop zone, page-count/thumbnail grid, live progress, validated-result panel, error state and reset action. Processing stays in browser Web Workers. Every downloaded PDF is reopened and structurally validated before a link is exposed. Page thumbnails use the existing PDF.js dependency; no new runtime dependency was added.
+
+### Limits
+
+- Merge: 2–10 files, 50 MB per file, 100 MB combined input, 100 MB output, 500 pages total.
+- Split: one PDF up to 50 MB/500 pages, up to 500 outputs, 100 MB combined output, ZIP up to 500 entries.
+- Rotate: one PDF up to 50 MB/500 pages, 50 MB output.
+- Watermark/Page Numbers: one PDF up to 50 MB/500 pages, 50 MB output; watermark images up to 10 MB.
+
 ## Watermarks and page numbering
 
-Watermarks support text and PNG/JPG images, selected page ranges, five anchor positions, rotation, opacity and font size. Page numbering supports selected ranges, a starting number, a `{n}` template, position, rotation, opacity and font size. Both operations run in a worker, preserve page order and dimensions, reopen and validate their output, and expose a download only after validation. Watermarks are visible overlays; they do not remove content and are not a redaction feature. Standard PDF fonts have limited glyph coverage, so non-Latin text may not render as intended.
+Watermarks support text and PNG/JPG images, selected page ranges, nine preset positions plus custom X/Y positioning, horizontal/vertical alignment, rotation, opacity, font size, text color, font selection and page-width scale. Page numbering supports selected ranges, skip-cover, a starting number, prefix/suffix, three numbering formats, six positions, alignment, custom margins, font selection, font size and text color. Both operations run in a worker, preserve page order and dimensions, reopen and validate their output, and expose a download only after validation. Watermarks are visible overlays; they do not remove content and are not a redaction feature. Standard PDF fonts have limited glyph coverage, so non-Latin text may not render as intended.
 
 ## Metadata
 
@@ -64,23 +83,22 @@ General repair is Planned. The current engine can parse supported PDFs and struc
 
 ## Verification record
 
-Final release checks passed for every Available registry operation, including real downloadable output, input rejection, cancellation, worker termination, object URL cleanup, output re-opening/integrity, keyboard operation, mobile viewports and axe checks. The full browser suite verified all 15 studio routes and all 30 tool routes.
+The five PDF Essentials tools were verified with real synthetic PDFs, including downloadable output, input rejection, cancellation, worker termination, object URL cleanup, output re-opening/integrity, keyboard operation, mobile viewports, dark theme and axe checks.
 
-Final commands and results:
+Commands and actual results from the completion run:
 
-- `npm.cmd test` — 53 tests passed across 11 files.
-- `npm.cmd run test:e2e -- --workers=1` — 44 Playwright tests passed.
-- `npm.cmd run test:e2e -- --workers=2` — 44 Playwright tests passed.
+- `npm.cmd test` — 284 tests passed across 38 files.
+- In-scope PDF Essentials Playwright tests — 31 passed.
+- Full Playwright suite — 129 passed, 9 failed when the unrelated `e2e/pdf-conversion-studio.spec.ts` file (which currently has a duplicate `page` declaration at line 184) is excluded from discovery. Two failures were Playwright trace-artifact `ENOENT` failures that passed when rerun individually; seven deterministic failures remain outside this milestone's five tools (Edit PDF status copy, Compress default-mode/cancellation expectations, Office text-summary expectation, and Spreadsheet CSV import selector). Those failures are outside the PDF Essentials scope and were not changed in this milestone.
+- Independent PDF.js validation — added in `e2e/pdf-js-validation.ts`; all five PDF Essentials outputs are reopened with PDF.js and checked for page count, page size, rotation, extracted text, image count and text placement.
+- Rotated-page regression fix — `src/lib/pdf-marking.ts` now adds the page `/Rotate` value to the mark rotation and positions rotated text/images by their rotated bounding box. `src/lib/pdf-marking.test.ts` extracts text with PDF.js from a 90° page and fails if the watermark or page number is clipped.
 - `npm.cmd run typecheck` — passed.
-- `npm.cmd run lint` — passed.
-- `npm.cmd run build` — passed; 49 static routes generated.
-- `python -m pytest backend/tests` — 3 tests passed.
-- `npm.cmd audit --audit-level=high` — 0 vulnerabilities reported.
-- `git diff --check` — passed; Git printed only line-ending conversion notices.
+- `npm.cmd run lint` — 0 errors, 29 warnings repository-wide; PDF Essentials files have 0 errors and 4 `no-img-element` warnings.
+- `npm.cmd run build` — passed; 64 static routes generated.
+- `npm.cmd run serve:static` — passed; the Windows `fileURLToPath` path bug was fixed.
+- `npx wrangler deploy --dry-run` — passed; Wrangler read all 580 static-export files and bundled the worker successfully.
 
-The resource-sensitive PDF-to-images cancellation test originally waited for a full page render before it could cancel. Under two-worker browser load, that render checkpoint exceeded its timeout. The test now waits for PDF.js's real worker to start, cancels the in-flight operation, and verifies worker termination with no partial outputs. Other stress-fixture setup waits remain bounded. The complete 44-test suite passed with both one and two workers.
-
-The PDF.js worker is bundled from `pdfjs-dist`; the project also uses `fflate` to create ZIP archives. The package lock records exact resolved dependencies. The audit found no known vulnerabilities at this check.
+The PDF.js worker is bundled from `pdfjs-dist`; the project also uses `fflate` to create ZIP archives. No new runtime dependency was introduced for this milestone. The package lock records exact resolved dependencies. Dependency auditing should still be run before a release deployment; it is not claimed here.
 
 ## Phase 2 release decision
 

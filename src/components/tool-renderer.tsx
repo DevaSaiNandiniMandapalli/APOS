@@ -31,6 +31,7 @@ const FileInspector = dynamic(() => import("@/components/file-inspector"), { ssr
 const DocumentSummary = dynamic(() => import("@/components/document-summary"), { ssr: false, loading });
 const OcrPdf = dynamic(() => import("@/components/ocr-pdf"), { ssr: false, loading });
 const OfficeConvert = dynamic(() => import("@/components/office-convert"), { ssr: false, loading });
+const PdfToOffice = dynamic(() => import("@/components/pdf-to-office"), { ssr: false, loading });
 const AiDocumentAgent = dynamic(() => import("@/components/ai-document-agent"), { ssr: false, loading });
 const UniversalConvert = dynamic(() => import("@/components/universal-convert"), { ssr: false, loading });
 const SignPdf = dynamic(() => import("@/components/sign-pdf"), { ssr: false, loading });
@@ -40,16 +41,16 @@ const UnlockPdf = dynamic(() => import("@/components/unlock-pdf"), { ssr: false,
 type ToolEntry = { pill?: string; render: () => ReactNode };
 
 const TOOLS: Record<string, ToolEntry> = {
-  "merge-pdf": { render: () => <MergePdf /> },
+  "merge-pdf": { pill: "Available · processed on this device", render: () => <MergePdf /> },
   "split-pdf": { pill: "Available · processed on this device", render: () => <SplitPdf /> },
   "rotate-pdf": { pill: "Available · processed on this device", render: () => <RotatePdf /> },
   "compress-pdf": { pill: "Available · structural rewrite on this device", render: () => <CompressPdf /> },
   "repair-pdf": { pill: "Available · structure rebuilt on this device", render: () => <PdfRepair /> },
   "optimize-pdf": { pill: "Available · measured optimization on this device", render: () => <PdfOptimize /> },
-  "pdf-to-images": { pill: "Available · processed on this device", render: () => <PdfToImages /> },
+  "pdf-to-images": { pill: "Available · 72–300 DPI PNG/JPG on this device", render: () => <PdfToImages /> },
   "pdf-to-text": { pill: "Available · browser-local batch conversion", render: () => <PdfToText /> },
-  "pdf-to-html": { pill: "Available · semantic text extraction on this device", render: () => <PdfToText outputFormat="html" /> },
-  "images-to-pdf": { pill: "Available · processed on this device", render: () => <ImagesToPdf /> },
+  "pdf-to-html": { pill: "Available · reading and layout HTML with a ZIP package", render: () => <PdfToText outputFormat="html" /> },
+  "images-to-pdf": { pill: "Available · page layout, margins and compression on this device", render: () => <ImagesToPdf /> },
   "pdf-watermark": { pill: "Available · processed on this device", render: () => <PdfMarking operation="watermark" /> },
   "pdf-page-numbers": { pill: "Available · processed on this device", render: () => <PdfMarking operation="page-number" /> },
   "pdf-metadata": { pill: "Available · processed on this device", render: () => <PdfMetadataTool /> },
@@ -73,7 +74,7 @@ const TOOLS: Record<string, ToolEntry> = {
   "file-inspector": { pill: "Available · browser-local file analysis", render: () => <FileInspector /> },
   "document-summary": { pill: "Available · Sarvam 105B document summary", render: () => <DocumentSummary /> },
   "ocr-pdf": { pill: "Available · browser-local OCR for scanned PDFs", render: () => <OcrPdf /> },
-  "pdf-to-office": { pill: "Available · text-based Word and Excel export", render: () => <OfficeConvert mode="pdf-to-office" /> },
+  "pdf-to-office": { pill: "Available · editable Word/Excel with OCR on this device", render: () => <PdfToOffice /> },
   "document-to-pdf": { pill: "Available · reflowed PDF from Word or text", render: () => <OfficeConvert mode="document-to-pdf" /> },
   "spreadsheet-to-pdf": { pill: "Available · paginated PDF table", render: () => <OfficeConvert mode="spreadsheet-to-pdf" /> },
   "presentation-to-pdf": { pill: "Available · text-faithful slide export", render: () => <OfficeConvert mode="presentation-to-pdf" /> },

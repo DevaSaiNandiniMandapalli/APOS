@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { canonicalTarget, convertUniversal, planConversion, TARGET_LABELS, type Target } from "@/lib/universal-convert";
 
 const TARGETS = Object.keys(TARGET_LABELS) as Target[];
@@ -108,6 +109,11 @@ export default function UniversalConvert() {
 
       {status && <p role="status" aria-live="polite">{status}</p>}
       {error && <p role="alert" className="merge-error">{error}</p>}
+      {error.includes("Visual Word") && (
+        <p className="route-note">
+          <Link className="text-link" href="/tools/pdf-to-office">Open PDF to Office</Link> to enable OCR or choose Visual Word.
+        </p>
+      )}
 
       {result && (
         <div className="merge-success">

@@ -3,8 +3,9 @@
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = new URL("../out/", import.meta.url).pathname;
+const ROOT = fileURLToPath(new URL("../out/", import.meta.url));
 const PORT = Number(process.env.PORT ?? 3000);
 const API_ORIGIN = process.env.APOS_API_ORIGIN ?? "https://apos.nxtgensec.org";
 const TYPES = {
@@ -58,6 +59,14 @@ createServer(async (request, response) => {
       return;
     }
   }
+  let notFound;
+  try {
+    notFound = await readFile(join(ROOT, "404.html"));
+  } catch {
+    // A build can briefly replace out/ while the preview server is running.
+    // Keep serving a simple 404 instead of crashing the whole test server.
+    notFound = Buffer.from("<!doctype html><html lang=\"en\"><title>Not found</title><h1>404 — Not found</h1></html>");
+  }
   response.writeHead(404, { "content-type": "text/html; charset=utf-8" });
-  response.end(await readFile(join(ROOT, "404.html")));
+  response.end(notFound);
 }).listen(PORT, () => console.log(`Static export served at http://localhost:${PORT}`));

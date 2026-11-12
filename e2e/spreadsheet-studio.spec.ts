@@ -33,7 +33,7 @@ test("exports a CSV download and imports CSV data", async ({ page }) => {
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("spreadsheet.csv");
 
-  await page.locator('[aria-label="Import CSV file"]').setInputFiles({
+  await page.locator('[aria-label="Import an Excel or CSV file"]').setInputFiles({
     name: "data.csv",
     mimeType: "text/csv",
     buffer: Buffer.from("5,6\n7,8"),

@@ -54,7 +54,7 @@ function statusLabel(status: string): string {
 
 export function toolMetadata(tool: Tool, studio: Studio): Metadata {
   const title = `${tool.name} — free ${studio.name.replace(/ Studio$/, "")} tool`;
-  const description = `${tool.description} Runs privately in your browser${tool.status === "available" ? " and works today" : `; currently ${statusLabel(tool.status)}`}. No upload, no account, no watermark.`;
+  const description = `${tool.description} Runs privately in your browser${tool.status === "available" ? " and works today" : `; currently ${statusLabel(tool.status)}`}. No upload, no account, no APOS-added watermark.`;
   return pageMetadata({
     title,
     description: description.slice(0, 300),
@@ -83,7 +83,7 @@ export function toolFaqs(tool: Tool, studio: Studio): Faq[] {
     {
       question: `Is ${tool.name} free to use?`,
       answer: ready
-        ? `Yes. ${tool.name} is free, needs no account and adds no watermark. There is no per-file or per-page charge.`
+        ? `Yes. ${tool.name} is free, needs no account and adds no APOS watermark. There is no per-file or per-page charge.`
         : `${tool.name} is not released yet, so nothing is charged. APOS labels unbuilt tools honestly instead of pretending they work.`,
     },
     {

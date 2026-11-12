@@ -15,7 +15,7 @@ export const siteFaqs: Faq[] = [
   },
   {
     question: "Is APOS free?",
-    answer: `Yes. Every available tool is free with no account, no watermark and no per-file limit. ${toolDefinitions.length - ready.length} tools are not finished yet and are labelled Planned or In Development instead of being hidden.`,
+    answer: `Yes. Every available tool is free with no account and no APOS-added watermark. Browser-local PDF tools use a 50 MB per-file limit; ${toolDefinitions.length - ready.length} tools are not finished yet and are labelled Planned or In Development instead of being hidden.`,
   },
   {
     question: "Which tools work today?",

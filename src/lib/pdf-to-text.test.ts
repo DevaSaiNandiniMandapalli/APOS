@@ -31,6 +31,18 @@ describe("PDF text extraction", () => {
     const document = makeDocument([makePage([]), makePage([{ str: "Readable" }])]);
     const output = await extractPdfDocumentText(document, { includePageLabels: false }, new AbortController().signal, () => undefined);
     expect(new TextDecoder().decode(output.bytes)).toBe("\n\nReadable");
+    expect(output.emptyPages).toEqual([1]);
+  });
+
+  it("extracts only the requested page range in the entered order", async () => {
+    const document = makeDocument([makePage([{ str: "One" }]), makePage([{ str: "Two" }]), makePage([{ str: "Three" }])]);
+    const output = await extractPdfDocumentText(document, { includePageLabels: true, pages: "3, 1" }, new AbortController().signal, () => undefined);
+    const text = new TextDecoder().decode(output.bytes);
+    expect(text).toContain("--- Page 3 ---\nThree");
+    expect(text).toContain("--- Page 1 ---\nOne");
+    expect(text).not.toContain("Page 2");
+    expect(output.selectedPages).toEqual([3, 1]);
+    expect(output.pageCount).toBe(2);
   });
 
   it("honors cancellation and rejects page counts outside configured limits", async () => {

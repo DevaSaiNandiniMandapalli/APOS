@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CONVERSION_LIMITS, conversionCapabilities, findConversionCapability, formatBytes, identifyInputFormat, runBoundedQueue, safeOutputFilename, validateConversionInput, validateConversionOutput, type ConversionFormat, type ConversionStatus } from "@/lib/conversion-engine";
+import Link from "next/link";
+import { CONVERSION_LIMITS, conversionCapabilities, findConversionCapability, formatBytes, identifyInputFormat, runBoundedQueue, safeOutputFilename, validateConversionInput, validateConversionOutput, type ConversionFormat, type ConversionResult, type ConversionStatus } from "@/lib/conversion-engine";
 import { PDF_LIMITS } from "@/lib/pdf-limits";
 
 type TextSettingsMode = "global" | "include" | "omit";
+type PageSettingsMode = "global" | "all" | "custom";
 type ConversionItem = {
   id: string;
   file: File;
@@ -14,11 +16,18 @@ type ConversionItem = {
   requestedName: string;
   outputName: string;
   textSettings: TextSettingsMode;
+  pageSettings: PageSettingsMode;
+  pageRange: string;
   completedPages: number;
   totalPages: number;
   output: Blob | null;
   url: string;
   outputBytes: number;
+  warnings: string[];
+  preview: string;
+  archive: Blob | null;
+  archiveUrl: string;
+  archiveName: string;
 };
 
 function statusLabel(status: ConversionStatus) {
@@ -33,13 +42,28 @@ function outputNames(items: ConversionItem[], extension: string) {
   return items.map((item) => ({ ...item, outputName: safeOutputFilename(item.file.name, item.requestedName, extension, occupied) }));
 }
 
+function ConversionPreview({ item, copied, onCopy }: { item: ConversionItem; copied: boolean; onCopy: () => void }) {
+  const [open, setOpen] = useState(false);
+  return <details className="conversion-preview" onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <summary>Preview extracted text</summary>
+    {open ? <pre>{item.preview}</pre> : null}
+    <button type="button" onClick={onCopy}>{copied ? "Copied" : "Copy extracted text"}</button>
+  </details>;
+}
+
 export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "txt" | "html" }) {
   const [items, setItems] = useState<ConversionItem[]>([]);
   const [includePageLabels, setIncludePageLabels] = useState(true);
+  const [defaultPageMode, setDefaultPageMode] = useState<"all" | "custom">("all");
+  const [defaultPageRange, setDefaultPageRange] = useState("");
+  const [htmlMode, setHtmlMode] = useState<"reading" | "layout">("reading");
+  const [includePictures, setIncludePictures] = useState(true);
+  const [includeTables, setIncludeTables] = useState(true);
   const [busy, setBusy] = useState(false);
   const [zipBusy, setZipBusy] = useState(false);
   const [zipUrl, setZipUrl] = useState("");
   const [reportUrl, setReportUrl] = useState("");
+  const [copiedId, setCopiedId] = useState("");
   const [error, setError] = useState("");
   const [dragActive, setDragActive] = useState(false);
   const itemsRef = useRef<ConversionItem[]>([]);
@@ -81,7 +105,9 @@ export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "tx
     const additions = selected.map((file) => ({
       id: crypto.randomUUID(), file, inputFormat: "unknown" as ConversionFormat, status: "validating" as ConversionStatus, error: "",
       requestedName: file.name.replace(/\.[^.]+$/, "") || "document", outputName: "", textSettings: "global" as TextSettingsMode,
+      pageSettings: "global" as PageSettingsMode, pageRange: "",
       completedPages: 0, totalPages: 0, output: null, url: "", outputBytes: 0,
+      warnings: [] as string[], preview: "", archive: null, archiveUrl: "", archiveName: "",
     }));
     updateItems((existing) => [...existing, ...additions]);
     await Promise.all(additions.map(async (item) => {
@@ -124,21 +150,64 @@ export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "tx
         controllersRef.current.set(id, itemController);
         updateItems((existing) => existing.map((entry) => entry.id === id ? { ...entry, status: "processing", error: "", completedPages: 0, totalPages: 0 } : entry));
         const includeLabels = item.textSettings === "global" ? includePageLabels : item.textSettings === "include";
+        const pages = item.pageSettings === "custom"
+          ? item.pageRange
+          : item.pageSettings === "all"
+            ? ""
+            : defaultPageMode === "custom" ? defaultPageRange : "";
+        if (item.pageSettings === "custom" && !item.pageRange.trim()) throw new Error("Enter a page range for this file, such as 1-3, 5.");
+        if (item.pageSettings === "global" && defaultPageMode === "custom" && !defaultPageRange.trim()) throw new Error("Enter a default page range or switch the batch default to all pages.");
         let convertedBytes: Uint8Array | null = null;
         try {
-          const result = await converter.convert(item.file, { includePageLabels: includeLabels }, itemController.signal, (progress) => {
+          const result: ConversionResult = await converter.convert(item.file, {
+            includePageLabels: includeLabels,
+            pages,
+            layout: htmlMode,
+            includePictures,
+            includeTables,
+          }, itemController.signal, (progress) => {
             if (run !== runRef.current || !mountedRef.current) return;
             updateItems((existing) => existing.map((entry) => entry.id === id ? { ...entry, completedPages: progress.completed, totalPages: progress.total } : entry));
           });
           convertedBytes = result.bytes;
           validateConversionOutput(result.bytes, converter);
           const outputTotal = itemsRef.current.reduce((sum, entry) => sum + entry.outputBytes, 0);
-          if (outputTotal + result.bytes.byteLength > CONVERSION_LIMITS.batchBytes) throw new Error(`Validated outputs would exceed the ${formatBytes(CONVERSION_LIMITS.batchBytes)} batch output limit.`);
+          if (outputTotal + result.bytes.byteLength + (result.archive?.bytes.byteLength ?? 0) > CONVERSION_LIMITS.batchBytes) throw new Error(`Validated outputs would exceed the ${formatBytes(CONVERSION_LIMITS.batchBytes)} batch output limit.`);
+          const preview = outputFormat === "txt" ? new TextDecoder("utf-8").decode(result.bytes.subarray(0, 4000)) : "";
           const blob = new Blob([result.bytes.slice().buffer as ArrayBuffer], { type: converter.outputMediaType });
           result.bytes.fill(0); convertedBytes = null;
           const url = URL.createObjectURL(blob);
           urlsRef.current.push(url);
-          if (run === runRef.current && mountedRef.current) updateItems((existing) => existing.map((entry) => entry.id === id ? { ...entry, status: "complete", output: blob, url, outputBytes: blob.size, completedPages: result.pageCount ?? 0, totalPages: result.pageCount ?? 0, error: "" } : entry));
+          let archive: Blob | null = null;
+          let archiveUrl = "";
+          let archiveName = "";
+          if (result.archive) {
+            const archiveBytes = result.archive.bytes;
+            if (archiveBytes.byteLength < 22 || archiveBytes[0] !== 0x50 || archiveBytes[1] !== 0x4b) {
+              archiveBytes.fill(0);
+              throw new Error("The generated HTML package failed ZIP validation.");
+            }
+            archive = new Blob([archiveBytes.slice().buffer as ArrayBuffer], { type: "application/zip" });
+            archiveBytes.fill(0);
+            archiveUrl = URL.createObjectURL(archive);
+            urlsRef.current.push(archiveUrl);
+            archiveName = result.archive.name;
+          }
+          if (run === runRef.current && mountedRef.current) updateItems((existing) => existing.map((entry) => entry.id === id ? {
+            ...entry,
+            status: "complete",
+            output: blob,
+            url,
+            outputBytes: blob.size + (archive?.size ?? 0),
+            completedPages: result.pageCount ?? 0,
+            totalPages: result.pageCount ?? 0,
+            error: "",
+            warnings: result.warnings ?? [],
+            preview,
+            archive,
+            archiveUrl,
+            archiveName,
+          } : entry));
         } catch (reason) {
           convertedBytes?.fill(0);
           if (skippedRef.current.has(id)) return;
@@ -183,9 +252,20 @@ export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "tx
     void runBatch([id]);
   };
 
-  const updateItemSetting = (id: string, update: Partial<Pick<ConversionItem, "requestedName" | "textSettings">>) => {
+  const updateItemSetting = (id: string, update: Partial<Pick<ConversionItem, "requestedName" | "textSettings" | "pageSettings" | "pageRange">>) => {
     revokeAuxiliaryUrls();
     updateItems((existing) => existing.map((item) => item.id === id && ["queued", "failed", "cancelled", "skipped"].includes(item.status) ? { ...item, ...update } : item));
+  };
+
+  const copyPreview = async (item: ConversionItem) => {
+    if (!item.preview) return;
+    try {
+      await navigator.clipboard.writeText(item.preview);
+      setCopiedId(item.id);
+      window.setTimeout(() => setCopiedId((current) => current === item.id ? "" : current), 2200);
+    } catch {
+      setError("The browser did not allow clipboard access. Select the preview text and copy it manually.");
+    }
   };
 
   const makeZip = async () => {
@@ -219,7 +299,7 @@ export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "tx
     const failed = itemsRef.current.filter((item) => item.status === "failed" || item.status === "skipped" || item.status === "cancelled");
     if (!failed.length) return;
     revokeAuxiliaryUrls();
-    const report = ["APOS PDF to text batch report", "", ...failed.map((item) => `${item.file.name} — ${statusLabel(item.status)}: ${item.error || "No additional details."}`)].join("\n");
+    const report = [`APOS PDF to ${outputFormat === "html" ? "HTML" : "text"} batch report`, "", ...failed.map((item) => `${item.file.name} — ${statusLabel(item.status)}: ${item.error || "No additional details."}`)].join("\n");
     const url = URL.createObjectURL(new Blob([report], { type: "text/plain;charset=utf-8" }));
     urlsRef.current.push(url); reportUrlRef.current = url; setReportUrl(url);
   };
@@ -255,13 +335,36 @@ export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "tx
 
   return <section className="merge-panel" aria-labelledby="pdf-to-text-heading">
     <h2 id="pdf-to-text-heading">Convert PDF to {outputLabel} on this device</h2>
-    <p>Extract selectable text from PDF pages into {outputFormat === "html" ? "a self-contained HTML document with escaped text in a preformatted reading view" : "UTF-8 plain-text files"}. Scanned pages without a text layer need OCR, which is not included in this converter. HTML output does not preserve PDF layout, fonts, images or tables.</p>
-    <div className="privacy-note">Input is identified from its file signature. Up to {converter.maxBatchFiles} PDFs, {formatBytes(converter.maxFileBytes)} each and {formatBytes(converter.maxBatchBytes)} total; at most {CONVERSION_LIMITS.concurrentFiles} files are processed at once and each PDF is limited to {PDF_LIMITS.pages} pages. PDF reading order follows the content order encoded by the source file.</div>
+    <p>{outputFormat === "html"
+      ? "Turn selectable PDF text into a safe, responsive HTML document. Reading mode rebuilds headings, paragraphs and tables; layout mode approximates the original page arrangement. Pictures and tables can be included, and the complete HTML package is available with its assets in a ZIP."
+      : "Extract selectable text from PDF pages into UTF-8 plain-text files, with optional page headings, custom page ranges, previews and batch downloads. Scanned pages without a text layer need OCR, which is not included in this converter."}</p>
+    <div className="privacy-note">Input is identified from its file signature. Up to {converter.maxBatchFiles} PDFs, {formatBytes(converter.maxFileBytes)} each and {formatBytes(converter.maxBatchBytes)} total; at most {CONVERSION_LIMITS.concurrentFiles} files are processed at once and each PDF is limited to {PDF_LIMITS.pages} pages. PDF reading order follows the content order encoded by the source file. Nothing is uploaded.</div>
     <label className="file-picker">Choose PDF files<input ref={inputRef} type="file" accept="application/pdf,.pdf" multiple disabled={busy || zipBusy} onChange={(event) => { if (event.currentTarget.files) void addFiles(event.currentTarget.files); }}/></label>
     <div className={`drop-zone ${dragActive ? "drop-active" : ""}`} onDragEnter={(event) => { event.preventDefault(); setDragActive(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragActive(false); }} onDrop={(event) => { event.preventDefault(); setDragActive(false); if (event.dataTransfer.files) void addFiles(event.dataTransfer.files); }}>
       Drop PDF files here, or use the accessible file picker above.
     </div>
-    <div className="split-settings"><label htmlFor="pdf-text-page-labels">Default page labels</label><select id="pdf-text-page-labels" className="split-range-input" value={includePageLabels ? "include" : "omit"} disabled={busy} onChange={(event) => setIncludePageLabels(event.target.value === "include")}><option value="include">Include page headings</option><option value="omit">Omit page headings</option></select></div>
+
+    <fieldset className="conversion-options">
+      <legend>Batch defaults</legend>
+      <label htmlFor="pdf-text-page-labels">Default page labels
+        <select id="pdf-text-page-labels" value={includePageLabels ? "include" : "omit"} disabled={busy} onChange={(event) => setIncludePageLabels(event.target.value === "include")}><option value="include">Include page headings</option><option value="omit">Omit page headings</option></select>
+      </label>
+      <label htmlFor="pdf-text-default-pages">Default pages
+        <select id="pdf-text-default-pages" value={defaultPageMode} disabled={busy} onChange={(event) => setDefaultPageMode(event.target.value as "all" | "custom")}><option value="all">All pages</option><option value="custom">Custom page range</option></select>
+      </label>
+      {defaultPageMode === "custom" && <label htmlFor="pdf-text-default-range">Default page range
+        <input id="pdf-text-default-range" value={defaultPageRange} disabled={busy} onChange={(event) => setDefaultPageRange(event.target.value)} placeholder="1-3, 5" aria-describedby="pdf-text-default-range-help" />
+        <span id="pdf-text-default-range-help" className="route-note">Use page numbers or ranges, such as 1-3, 5. Selected pages keep the entered order.</span>
+      </label>}
+      {outputFormat === "html" && <>
+        <label htmlFor="pdf-html-mode">HTML mode
+          <select id="pdf-html-mode" value={htmlMode} disabled={busy} onChange={(event) => setHtmlMode(event.target.value as "reading" | "layout")}><option value="reading">Reading mode — responsive and semantic</option><option value="layout">Layout mode — approximate page arrangement</option></select>
+        </label>
+        <label className="office-check"><input type="checkbox" checked={includePictures} disabled={busy} onChange={(event) => setIncludePictures(event.target.checked)} /> Include pictures found in the PDF</label>
+        <label className="office-check"><input type="checkbox" checked={includeTables} disabled={busy} onChange={(event) => setIncludeTables(event.target.checked)} /> Detect and include tables</label>
+      </>}
+    </fieldset>
+
     {items.length > 0 && <>
       <p role="status" aria-live="polite" className="route-note">Batch: {completedCount} complete, {queueCount} queued, {activeCount} active, {failedCount} failed. {totalProgress > 0 && `Extracted ${progress} of ${totalProgress} pages.`}</p>
       <ol className="merge-list conversion-list" aria-label="Conversion batch">
@@ -270,10 +373,16 @@ export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "tx
           <div className="conversion-item-main"><strong className="merge-filename" title={item.file.name}>{item.file.name}</strong><span className="tool-description">{formatBytes(item.file.size)} · detected {item.inputFormat.toUpperCase()}</span>
             {(item.totalPages > 0 || item.status === "processing") && <span className="tool-description">{item.totalPages ? `Pages ${item.completedPages} of ${item.totalPages}` : "Opening and validating PDF…"}</span>}
             {item.status === "failed" && <span className="merge-error">{item.error}</span>}
-            {item.status === "complete" && <span className="tool-description">Validated {item.outputBytes ? formatBytes(item.outputBytes) : "empty text output"} · {item.totalPages} pages</span>}
+            {item.status === "complete" && <span className="tool-description">Validated {item.outputBytes ? formatBytes(item.outputBytes) : "output"} · {item.totalPages} page(s)</span>}
+            {item.warnings.map((warning) => <span key={warning} className="office-convert__warning" role="status">{warning}</span>)}
             <label className="conversion-setting">Output filename<input aria-label={`Output filename for ${item.file.name}`} value={item.requestedName} disabled={busy || item.status === "complete"} onChange={(event) => updateItemSetting(item.id, { requestedName: event.target.value })}/></label>
             <label className="conversion-setting">Page headings<select aria-label={`Page headings for ${item.file.name}`} value={item.textSettings} disabled={busy || item.status === "complete"} onChange={(event) => updateItemSetting(item.id, { textSettings: event.target.value as TextSettingsMode })}><option value="global">Use batch default</option><option value="include">Include headings</option><option value="omit">Omit headings</option></select></label>
+            <label className="conversion-setting">Pages<select aria-label={`Pages for ${item.file.name}`} value={item.pageSettings} disabled={busy || item.status === "complete"} onChange={(event) => updateItemSetting(item.id, { pageSettings: event.target.value as PageSettingsMode })}><option value="global">Use batch default</option><option value="all">All pages</option><option value="custom">Custom page range</option></select></label>
+            {item.pageSettings === "custom" && <label className="conversion-setting">Page range<input aria-label={`Page range for ${item.file.name}`} value={item.pageRange} disabled={busy || item.status === "complete"} onChange={(event) => updateItemSetting(item.id, { pageRange: event.target.value })} placeholder="1-3, 5"/></label>}
             {item.status === "complete" && item.url && <a className="text-link" href={item.url} download={item.outputName}>{item.outputName}</a>}
+            {item.status === "complete" && item.archiveUrl && <a className="text-link" href={item.archiveUrl} download={item.archiveName}>Download ZIP package · {item.archiveName}</a>}
+            {item.status === "complete" && outputFormat === "html" && item.url && <a className="text-link" href={item.url} target="_blank" rel="noopener noreferrer">Preview HTML in a new tab</a>}
+            {item.status === "complete" && outputFormat === "txt" && item.preview && <ConversionPreview item={item} copied={copiedId === item.id} onCopy={() => void copyPreview(item)} />}
             {item.status === "failed" && <button type="button" onClick={() => retryItem(item.id)} disabled={busy}>Retry</button>}
             {["queued", "failed", "processing", "cancelled"].includes(item.status) && <button type="button" onClick={() => skipItem(item.id)}>Skip</button>}
           </div>
@@ -289,6 +398,7 @@ export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "tx
       {items.length > 0 && <button type="button" onClick={clearBatch} disabled={busy || zipBusy || items.some((item) => item.status === "validating")}>Clear batch</button>}
     </div>
     {error && <p role="alert" className="merge-error">{error}</p>}
+    {error.includes("OCR") && <p className="route-note"><Link className="text-link" href="/tools/ocr-pdf">Open OCR PDF</Link> to add a searchable text layer first.</p>}
     {zipUrl && <div className="merge-success"><p>ZIP archive is ready from validated outputs.</p><a href={zipUrl} download={`apos-converted-${outputFormat === "txt" ? "text" : outputFormat}.zip`}>Download completed files as ZIP</a></div>}
     {reportUrl && <div className="merge-success"><p>Batch error report is ready.</p><a href={reportUrl} download="apos-conversion-report.txt">Download error report</a></div>}
   </section>;

@@ -4,7 +4,14 @@ import { imageFormatSignature, readImageDimensions } from "./image-format";
 export type ConversionFormat = "pdf" | "txt" | "html" | "png" | "jpeg" | "webp" | "tiff" | "docx" | "xlsx" | "pptx" | "odt" | "ods" | "odp" | "unknown";
 export type ConversionStatus = "queued" | "validating" | "processing" | "complete" | "failed" | "skipped" | "cancelled";
 export type ConversionProgress = { completed: number; total: number };
-export type ConversionResult = { bytes: Uint8Array; pageCount?: number; characterCount?: number };
+export type ConversionResult = {
+  bytes: Uint8Array;
+  pageCount?: number;
+  characterCount?: number;
+  emptyPages?: number[];
+  warnings?: string[];
+  archive?: { bytes: Uint8Array; name: string };
+};
 
 export type ConversionCapability = {
   id: string;
@@ -36,7 +43,11 @@ export const conversionCapabilities = [
     validateOutput: validatePlainTextOutput,
     convert: async (file, settings, signal, onProgress) => {
       const { convertPdfFileToText } = await import("./pdf-to-text");
-      return convertPdfFileToText(file, { includePageLabels: settings.includePageLabels !== false }, signal, ({ completedPages, totalPages }) => onProgress({ completed: completedPages, total: totalPages }));
+      const result = await convertPdfFileToText(file, { includePageLabels: settings.includePageLabels !== false, pages: String(settings.pages ?? "") }, signal, ({ completedPages, totalPages }) => onProgress({ completed: completedPages, total: totalPages }));
+      return {
+        ...result,
+        warnings: result.emptyPages.length ? [`${result.emptyPages.length} selected page(s) had no selectable text: ${result.emptyPages.join(", ")}.`] : [],
+      };
     },
   },
   {
@@ -53,7 +64,13 @@ export const conversionCapabilities = [
     validateOutput: validateHtmlOutput,
     convert: async (file, settings, signal, onProgress) => {
       const { convertPdfFileToHtml } = await import("./pdf-to-text");
-      return convertPdfFileToHtml(file, { includePageLabels: settings.includePageLabels !== false }, signal, ({ completedPages, totalPages }) => onProgress({ completed: completedPages, total: totalPages }));
+      return convertPdfFileToHtml(file, {
+        includePageLabels: settings.includePageLabels !== false,
+        pages: String(settings.pages ?? ""),
+        layout: String(settings.layout ?? "reading") === "layout" ? "layout" : "reading",
+        includePictures: settings.includePictures !== false,
+        includeTables: settings.includeTables !== false,
+      }, signal, ({ completedPages, totalPages }) => onProgress({ completed: completedPages, total: totalPages }));
     },
   },
   ...(["png", "jpeg", "webp", "tiff"] as const).flatMap((inputFormat) =>
@@ -150,7 +167,10 @@ export function validateHtmlOutput(bytes: Uint8Array) {
   let html: string;
   try { html = new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
   catch { throw new Error("The generated HTML did not pass UTF-8 output validation."); }
-  if (!/^<!doctype html><html lang="en">[\s\S]*<main>[\s\S]*<\/main>[\s\S]*<\/body><\/html>$/i.test(html) || /<script\b|<iframe\b|\son\w+\s*=|javascript:/i.test(html)) throw new Error("The generated HTML did not pass document structure validation.");
+  const unsafeTag = /<(?:script|iframe|object|embed|form|base)\b/i.test(html);
+  const unsafeAttribute = /<[^>]+\son\w+\s*=/i.test(html);
+  const unsafeUrl = /(?:href|src)\s*=\s*["']?\s*javascript:/i.test(html);
+  if (!/^<!doctype html><html lang="en">[\s\S]*<main>[\s\S]*<\/main>[\s\S]*<\/body><\/html>$/i.test(html) || unsafeTag || unsafeAttribute || unsafeUrl) throw new Error("The generated HTML did not pass document structure validation.");
 }
 
 export function safeOutputFilename(inputName: string, requestedBase: string, extension: string, occupied: Set<string>) {

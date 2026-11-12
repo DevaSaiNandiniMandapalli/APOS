@@ -2,10 +2,10 @@ import { PDF_LIMITS, PdfInputError } from "./pdf-limits";
 import { parsePageRanges, type PageRange } from "./split-pdf";
 
 export const PDF_IMAGE_LIMITS = {
-  pagesPerExport: 20,
+  pagesPerExport: 500,
   pixelsPerPage: 12_000_000,
-  totalPixels: 30_000_000,
-  totalBytes: 25 * 1024 * 1024,
+  totalPixels: 200_000_000,
+  totalBytes: 50 * 1024 * 1024,
 } as const;
 
 export function selectedImagePages(value: string, pageCount: number) {
