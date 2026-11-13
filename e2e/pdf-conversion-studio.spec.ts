@@ -365,3 +365,21 @@ test("real FastAPI layout engine converts PDF to Word through the main UI", asyn
   expect(xml).toContain("Annual Report");
   expect(xml).toContain("Revenue");
 });
+
+test("Editable Word anchors pictures at their original PDF coordinates", async ({ page }) => {
+  await page.goto("/tools/pdf-to-office");
+  await page.getByLabel("Choose a file").setInputFiles({ name: "picture-layout.pdf", mimeType: "application/pdf", buffer: await pdfWithPicture() });
+  await expect(page.getByRole("heading", { name: "Document preview" })).toBeVisible({ timeout: 20000 });
+  await page.getByRole("button", { name: "Convert PDF" }).click();
+  await expect(page.locator(".merge-success")).toBeVisible({ timeout: 30000 });
+  const { bytes } = await downloadBytes(page, "Download picture-layout.docx");
+  const entries = unzipSync(bytes);
+  const xml = new TextDecoder().decode(entries["word/document.xml"]);
+  expect(xml).toContain("<wp:anchor");
+  expect(xml).toContain('behindDoc="1"');
+  expect(xml).toContain("<wp:positionH");
+  expect(xml).toContain("<wp:positionV");
+  expect(xml).toContain("Text before the picture.");
+  expect(xml).toContain("Text after the picture.");
+  expect(Object.keys(entries).some((name) => name.startsWith("word/media/"))).toBe(true);
+});

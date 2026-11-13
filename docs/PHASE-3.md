@@ -56,7 +56,7 @@ The regression fixture in `e2e/pdf-word-regression.spec.ts` covers a five-page d
 
 ## Limits
 
-- **PDF to Office:** 25 MB input; 500 pages; DOCX/XLSX output cap 30 MB; visual Word mode is limited to 100 pages per run; OCR is limited to 20 pages per run and uses English Tesseract. Editable Word never inserts full-page screenshots: image-only pages either fail with their page numbers or are OCR’d when the user enables OCR. Full-page backgrounds are skipped and reported. Complex multi-column layouts, forms, annotations, exact fonts, vertical merges and inline picture anchoring are not reconstructed. XLSX cell values are text, not formulas. Table detection is heuristic and is reported as such.
+- **PDF to Office:** 25 MB input; 500 pages; DOCX/XLSX output cap 30 MB; visual Word mode is limited to 100 pages per run; OCR is limited to 20 pages per run and uses English Tesseract. Editable Word keeps content pictures anchored at their original PDF page coordinates and preserves source page sizes; text can still reflow when edited. Exact layout mode embeds each page as a picture and is not editable. Image-only pages either fail with their page numbers or are OCR'd when the user enables OCR. Full-page backgrounds are skipped and reported. Complex multi-column layouts, forms, annotations, exact fonts, vertical merges and inline text-box reconstruction are not guaranteed. XLSX cell values are text, not formulas. Table detection is heuristic and is reported as such.
 - **PDF to Images:** 50 MB input, 500 PDF pages, 500 output pages per run, 12 megapixels per page, 200 megapixels total, 50 MB combined output. 300 DPI on large pages can exceed the per-page or total limits; the tool reports this rather than truncating.
 - **PDF to Text:** 20 files per batch, 25 MB per file, 100 MB per batch, 500 pages per PDF, 20 MB text output. Only selectable text is extracted. Scanned pages require local OCR first; OCR is not silently substituted.
 - **PDF to HTML:** 20 files per batch, 25 MB per file, 500 pages per PDF. Reading order follows the encoded PDF content stream. Layout mode is approximate and does not reproduce fonts exactly. The standalone HTML embeds pictures as data URLs; the ZIP package uses `assets/` files.
@@ -78,12 +78,12 @@ npx wrangler deploy --dry-run
 
 Results from the PDF-to-Word fix verification:
 
-- `npm.cmd test` - 309 tests passed across 43 files.
+- `npm.cmd test` - 310 tests passed across 43 files.
 - `npm.cmd run typecheck` - passed.
 - `npm.cmd run lint` - 0 errors; 29 warnings, dominated by existing `<img>` notices for canvas/data-URL previews and pre-existing unused-variable warnings.
 - `npm.cmd run build` - passed; 65 static routes generated, including `/server-tools`.
 - Focused PDF/Office Playwright run - 29 passed.
-- Full Playwright suite `npx playwright test --workers=2` - 160 passed, 2 skipped (the real FastAPI integration tests require `APOS_LIVE_BACKEND=1`). The skipped tests passed separately against the live local backend.
+- Full Playwright suite `npx playwright test --workers=2` - 161 passed, 2 skipped (the real FastAPI integration tests require `APOS_LIVE_BACKEND=1`). The skipped tests passed separately against the live local backend.
 - `backend/.venv/Scripts/python.exe -m pytest backend/tests -q` - 18 passed.
 - `npx wrangler deploy --dry-run` - passed; the Worker and static assets bundle without errors.
 

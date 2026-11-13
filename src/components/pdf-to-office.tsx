@@ -364,10 +364,11 @@ export default function PdfToOffice() {
         </label>
         {format === "docx" && <label>Word mode
           <select value={mode} disabled={busy} onChange={(event) => setMode(event.target.value as PdfOfficeMode)}>
-            <option value="editable">Editable Word — rebuilt text, tables and content pictures</option>
-            <option value="visual">Visual Word — each page as a picture (not editable)</option>
+            <option value="editable">Editable Word — text and tables, pictures kept at source positions</option>
+            <option value="visual">Exact layout — every page as a picture (not editable)</option>
           </select>
         </label>}
+        {format === "docx" && mode === "editable" && <p className="route-note">Pictures are anchored at their original page coordinates. Text may reflow when edited. For a page-for-page visual match, choose Exact layout.</p>}
         {format === "docx" && mode === "editable" && <label>Word engine
           <select aria-label="Word engine" value={engine} disabled={busy} onChange={(event) => setEngine(event.target.value as "browser" | "server")}>
             <option value="browser">Browser-local — private, structured reconstruction</option>
@@ -406,7 +407,7 @@ export default function PdfToOffice() {
               <option value="spa">Spanish</option>
             </select>
           </label>}
-          <p className="route-note">The server uses a layout-reconstruction engine. It generally preserves columns, tables, images and styling better than browser text extraction, but complex layouts still need review.</p>
+          <p className="route-note">The server uses a layout-reconstruction engine. It generally preserves columns, tables and styling better than browser text extraction, but pictures and complex layouts may still be repositioned. For a pixel-identical page appearance, choose Exact layout.</p>
         </>}
         {format === "xlsx" && <p className="route-note">Each detected table becomes a worksheet; an extracted-text worksheet is always included. Cell values are written as text, not formulas.</p>}
         <label>Output filename

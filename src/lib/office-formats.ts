@@ -297,7 +297,7 @@ export type DocxContentBlock =
   | { kind: "paragraph"; text: string; alignment?: "left" | "center" | "right" | "justify"; fontSize?: number; color?: string; bold?: boolean; italic?: boolean; indent?: number; spaceBefore?: number; spaceAfter?: number; runs?: DocxRun[] }
   | { kind: "list"; text: string; indent?: number; runs?: DocxRun[] }
   | { kind: "table"; rows: string[][]; header?: boolean }
-  | { kind: "image"; bytes: Uint8Array; format: "png" | "jpeg"; width: number; height: number; maxWidth?: number; maxHeight?: number; alt?: string }
+  | { kind: "image"; bytes: Uint8Array; format: "png" | "jpeg"; width: number; height: number; maxWidth?: number; maxHeight?: number; alt?: string; anchor?: { x: number; y: number; width: number; height: number; pageWidth: number; pageHeight: number; behindText?: boolean } }
   | { kind: "pageBreak" }
   | { kind: "sectionBreak"; pageWidth: number; pageHeight: number };
 
@@ -411,9 +411,21 @@ export function buildDocxDocument(
       const scale = Math.min(1, maxWidth / (block.width * 9525), maxHeight / (block.height * 9525));
       const cx = Math.max(1, Math.round(block.width * 9525 * scale));
       const cy = Math.max(1, Math.round(block.height * 9525 * scale));
-      content.push(
-        `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${imageIndex}" name="Picture ${imageIndex}" descr="${xmlEscape(block.alt ?? "Embedded picture")}"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="${imageIndex}" name="${name}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${relId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`,
-      );
+      const picture = `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="${imageIndex}" name="${name}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${relId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic>`;
+      if (block.anchor) {
+        const anchor = block.anchor;
+        const anchorCx = Math.max(1, Math.round(anchor.width * 12700));
+        const anchorCy = Math.max(1, Math.round(anchor.height * 12700));
+        const offsetX = Math.max(0, Math.round(anchor.x * 12700));
+        const offsetY = Math.max(0, Math.round((anchor.pageHeight - anchor.y - anchor.height) * 12700));
+        content.push(
+          `<w:p><w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="${imageIndex + 1}" behindDoc="${anchor.behindText === false ? 0 : 1}" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="page"><wp:posOffset>${offsetX}</wp:posOffset></wp:positionH><wp:positionV relativeFrom="page"><wp:posOffset>${offsetY}</wp:posOffset></wp:positionV><wp:extent cx="${anchorCx}" cy="${anchorCy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/><wp:docPr id="${imageIndex}" name="Picture ${imageIndex}" descr="${xmlEscape(block.alt ?? "Embedded picture")}"/>${picture}</wp:anchor></w:drawing></w:r></w:p>`,
+        );
+      } else {
+        content.push(
+          `<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${imageIndex}" name="Picture ${imageIndex}" descr="${xmlEscape(block.alt ?? "Embedded picture")}"/>${picture}</wp:inline></w:drawing></w:r></w:p>`,
+        );
+      }
     }
   }
 

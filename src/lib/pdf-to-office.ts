@@ -187,12 +187,23 @@ function positionedPageBlocks(
           maxWidth: Math.max(72, pageWidth(page) - 72),
           maxHeight: Math.max(72, pageHeight(page) - 72),
           alt: `Picture from PDF page ${page.page}`,
+          anchor: settings.pageBreaks ? {
+            x: picture.x,
+            y: picture.y,
+            width: Math.max(1, picture.boxWidth),
+            height: Math.max(1, picture.boxHeight),
+            pageWidth: picture.pageWidth,
+            pageHeight: picture.pageHeight,
+            behindText: true,
+          } : undefined,
         },
       });
     }
   }
 
-  return positioned.sort((left, right) => right.y - left.y || left.order - right.order);
+  const images = positioned.filter(({ block }) => block.kind === "image");
+  const flow = positioned.filter(({ block }) => block.kind !== "image").sort((left, right) => right.y - left.y || left.order - right.order);
+  return [...images, ...flow];
 }
 
 function addPageBoundary(blocks: DocxContentBlock[], previous: PdfPageStructure, next: PdfPageStructure, pageBreaks: boolean) {

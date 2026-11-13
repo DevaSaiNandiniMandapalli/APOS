@@ -36,6 +36,19 @@ describe("structured Word export", () => {
     expect(readDocxParagraphs(bytes)).toEqual(expect.arrayContaining(["Quarterly report", "Revenue grew by 12%."]));
   });
 
+  it("anchors pictures at their original page coordinates", () => {
+    const bytes = buildDocxDocument([
+      { kind: "paragraph", text: "Before" },
+      { kind: "image", bytes: PNG_1PX, format: "png", width: 240, height: 160, anchor: { x: 100, y: 400, width: 180, height: 120, pageWidth: 595, pageHeight: 842, behindText: true } },
+    ], "Anchored");
+    const { xml } = validateDocxDocument(bytes);
+    expect(xml).toContain("<wp:anchor");
+    expect(xml).toContain('relativeFrom="page"');
+    expect(xml).toContain('behindDoc="1"');
+    expect(xml).toContain("<wp:positionH");
+    expect(xml).toContain("<wp:positionV");
+  });
+
   it("rejects a package whose image relationship points to a missing part", () => {
     const bytes = buildDocxDocument([{ kind: "image", bytes: PNG_1PX, format: "png", width: 10, height: 10 }]);
     const entries = unzipSync(bytes);
