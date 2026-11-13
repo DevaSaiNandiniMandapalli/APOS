@@ -63,7 +63,9 @@ export default async function ToolPage({ params }: { params: Promise<{ toolId: s
         <p>
           {tool.name} lets you {tool.description.charAt(0).toLowerCase()}{tool.description.slice(1)}{" "}
           {tool.status === "available"
-            ? "It is free to use, needs no account, and runs entirely inside your browser, so the document never leaves your device."
+            ? tool.id === "pdf-to-office"
+              ? "Its default conversion runs entirely in your browser. An optional, explicitly labelled layout-preserving engine uses the configured APOS processing server for documents you choose to send there."
+              : "It is free to use, needs no account, and runs entirely inside your browser, so the document never leaves your device."
             : "This tool is not released yet, and APOS says so plainly rather than offering a button that does nothing."}
         </p>
       </section>

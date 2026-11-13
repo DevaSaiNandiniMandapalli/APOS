@@ -3,6 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { PDFDocument, StandardFonts, rgb } from "@cantoo/pdf-lib";
 import { unzipSync } from "fflate";
 import { readFile } from "node:fs/promises";
+import { buildDocxDocument } from "../src/lib/office-formats";
 
 async function structurePdf(): Promise<Buffer> {
   const pdf = await PDFDocument.create();
@@ -309,4 +310,58 @@ test("PDF to Text preserves UTF-8 text from a real PDF", async ({ page }) => {
   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   expect(text).toContain("naïve façade café");
   expect(text).toContain("--- Page 2 ---");
+});
+
+test("PDF to Office can use the layout-preserving server engine", async ({ page }) => {
+  const docx = buildDocxDocument([{ kind: "paragraph", text: "Server converted text" }], "Server");
+  await page.route("**/api/v1/tools", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        version: "test", max_upload_mb: 50, max_files: 20, processing_server: true,
+        tools: [
+          { name: "pdf_to_word", label: "PDF → Word", description: "Layout-preserving server conversion.", available: true, accepts: ".pdf", min_files: 1, options: [] },
+          { name: "ocr", label: "OCR", description: "OCR", available: false },
+        ],
+      }),
+    });
+  });
+  await page.route("**/api/v1/tools/pdf_to_word", async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "content-disposition": "attachment; filename*=UTF-8''server.docx" },
+      body: Buffer.from(docx),
+    });
+  });
+  await page.goto("/tools/pdf-to-office");
+  await chooseOfficePdf(page);
+  await expect(page.getByLabel("Word engine").getByRole("option", { name: /Layout-preserving server/ })).toBeAttached();
+  await page.getByLabel("Word engine").selectOption("server");
+  await expect(page.getByText(/Layout-preserving mode uploads this PDF/i)).toBeVisible();
+  await page.getByRole("button", { name: "Convert PDF" }).click();
+  await expect(page.locator(".merge-success")).toBeVisible({ timeout: 30000 });
+  const { bytes, name } = await downloadBytes(page, "Download annual.docx");
+  expect(name).toBe("annual.docx");
+  const xml = new TextDecoder().decode(unzipSync(bytes)["word/document.xml"]);
+  expect(xml).toContain("Server converted text");
+});
+
+test("real FastAPI layout engine converts PDF to Word through the main UI", async ({ page }) => {
+  test.setTimeout(120000);
+  test.skip(!process.env.APOS_LIVE_BACKEND, "Requires the local FastAPI processing server on port 8000.");
+  await page.route("**/api/v1/**", async (route) => {
+    const target = route.request().url().replace("http://localhost:3000", "http://127.0.0.1:8000");
+    const response = await route.fetch({ url: target });
+    await route.fulfill({ response });
+  });
+  await page.goto("/tools/pdf-to-office");
+  await chooseOfficePdf(page);
+  await expect(page.getByLabel("Word engine").getByRole("option", { name: /Layout-preserving server/ })).toBeAttached({ timeout: 20000 });
+  await page.getByLabel("Word engine").selectOption("server");
+  await page.getByRole("button", { name: "Convert PDF" }).click();
+  await expect(page.locator(".merge-success")).toBeVisible({ timeout: 60000 });
+  const { bytes } = await downloadBytes(page, "Download annual.docx");
+  const xml = new TextDecoder().decode(unzipSync(bytes)["word/document.xml"]);
+  expect(xml).toContain("Annual Report");
+  expect(xml).toContain("Revenue");
 });

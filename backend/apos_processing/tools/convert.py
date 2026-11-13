@@ -12,7 +12,7 @@ from pathlib import Path
 import img2pdf
 import pypdfium2 as pdfium
 
-from apos_processing.tools.helpers import ToolError, read_pdf, safe_stem, zip_files
+from apos_processing.tools.helpers import ToolError, parse_page_ranges, read_pdf, safe_stem, zip_files
 from apos_processing.tools.registry import Option, Tool, ToolResult, UploadedFile, register
 
 DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -85,16 +85,47 @@ def run_pdf_to_word(files: list[UploadedFile], options: dict) -> ToolResult:
     (uploaded,) = files
     from pdf2docx import Converter  # heavy import (opencv); keep it lazy
 
+    pages_spec = str(options.get("pages", "")).strip()
+    reader = read_pdf(uploaded.data)
+    page_indexes = parse_page_ranges(pages_spec, len(reader.pages)) if pages_spec else None
+
+    ocr_requested = str(options.get("ocr", "")).lower() in ("true", "on", "1", "yes")
+    source_data = uploaded.data
+    if ocr_requested:
+        if not ocr_available():
+            raise ToolError("OCR needs ocrmypdf and tesseract on the server")
+        language = str(options.get("language", "eng")).strip() or "eng"
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "in.pdf"
+            target = Path(tmp) / "ocr.pdf"
+            source.write_bytes(uploaded.data)
+            try:
+                import ocrmypdf
+                ocrmypdf.ocr(str(source), str(target), language=language, skip_text=True, progress_bar=False)
+            except Exception as exc:
+                raise ToolError(f"OCR failed: {exc}") from exc
+            if not target.exists():
+                raise ToolError("OCR did not produce a readable PDF")
+            source_data = target.read_bytes()
+
     with tempfile.TemporaryDirectory() as tmp:
         source = Path(tmp) / "in.pdf"
         target = Path(tmp) / "out.docx"
-        source.write_bytes(uploaded.data)
+        source.write_bytes(source_data)
+        converter = None
         try:
             converter = Converter(str(source))
-            converter.convert(str(target))
-            converter.close()
+            converter.convert(str(target), pages=page_indexes, multi_processing=False)
         except Exception as exc:
             raise ToolError("could not convert this PDF to Word") from exc
+        finally:
+            if converter is not None:
+                try:
+                    converter.close()
+                except Exception:
+                    pass
+        if not target.exists() or not target.read_bytes().startswith(b"PK"):
+            raise ToolError("PDF to Word did not produce a valid Word document")
         return ToolResult(f"{safe_stem(uploaded.name)}.docx", target.read_bytes(), DOCX_TYPE)
 
 
@@ -191,9 +222,18 @@ register(Tool(
     name="pdf_to_word",
     produces_pdf=False,
     label="PDF → Word",
-    description="Turn a PDF into an editable .docx.",
+    description="Rebuild PDF text, layout, tables and pictures into an editable .docx with a higher-fidelity server layout engine.",
     icon="📝",
     run=run_pdf_to_word,
+    options=(
+        Option("pages", "Pages", help="e.g. 1-3,5 — blank converts every page"),
+        Option("ocr", "OCR scanned pages first", kind="checkbox", default=False,
+               help="needs OCRmyPDF + Tesseract on the server"),
+        Option("language", "OCR language", default="eng",
+               help="Tesseract language code, e.g. eng, hin, deu"),
+    ),
+    available=lambda: importlib.util.find_spec("pdf2docx") is not None,
+    unavailable_hint="install the pdf2docx package on the server",
     category="convert",
 ))
 

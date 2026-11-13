@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { validateDocxDocument } from "./office-formats";
 
 const optionSchema = z.object({
   name: z.string().min(1),
@@ -112,6 +113,23 @@ export async function inspectServerFormFields(bytes: ArrayBuffer, filename: stri
   })).safeParse(payload.fields);
   if (!parsed.success) throw new Error("The processing server returned invalid form-field metadata.");
   return parsed.data;
+}
+
+export async function runServerPdfToWord(
+  file: File,
+  options: { pages?: string; ocr?: boolean; language?: string },
+  signal?: AbortSignal,
+) {
+  const form = new FormData();
+  form.append("files", file, file.name);
+  if (options.pages?.trim()) form.append("pages", options.pages.trim());
+  form.append("ocr", options.ocr ? "true" : "false");
+  if (options.language) form.append("language", options.language);
+  const output = await runServerTool("pdf_to_word", form, signal);
+  const bytes = new Uint8Array(await output.blob.arrayBuffer());
+  validateDocxDocument(bytes);
+  if (bytes.byteLength > 100 * 1024 * 1024) throw new Error("The server produced a Word file larger than the 100 MB limit.");
+  return { blob: output.blob, filename: output.filename, bytes: bytes.byteLength };
 }
 
 function responseFilename(response: Response, fallback: string) {

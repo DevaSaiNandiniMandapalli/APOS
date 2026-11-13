@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("../out/", import.meta.url));
 const PORT = Number(process.env.PORT ?? 3000);
 const API_ORIGIN = process.env.APOS_API_ORIGIN ?? "https://apos.nxtgensec.org";
+const PROCESSING_ORIGIN = (process.env.APOS_PROCESSING_ORIGIN ?? "").replace(/\/+$/, "");
 const TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript",
@@ -34,6 +35,39 @@ const existing = async (path) => {
 
 createServer(async (request, response) => {
   const url = new URL(request.url, "http://localhost");
+  if (url.pathname.startsWith("/api/v1/")) {
+    if (!PROCESSING_ORIGIN) {
+      response.writeHead(404, { "content-type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify({ error: "The APOS processing server is not configured on this static host." }));
+      return;
+    }
+    const body = await new Promise((resolve) => {
+      const chunks = [];
+      request.on("data", (chunk) => chunks.push(chunk));
+      request.on("end", () => resolve(Buffer.concat(chunks)));
+    });
+    try {
+      const upstream = await fetch(`${PROCESSING_ORIGIN}${url.pathname}${url.search}`, {
+        method: request.method,
+        headers: {
+          "content-type": request.headers["content-type"] ?? "application/octet-stream",
+          accept: request.headers.accept ?? "*/*",
+        },
+        body: request.method === "GET" || request.method === "HEAD" ? undefined : body,
+      });
+      const headers = { "cache-control": "no-store" };
+      for (const name of ["content-type", "content-disposition", "content-length", "x-apos-filename"]) {
+        const value = upstream.headers.get(name);
+        if (value) headers[name] = value;
+      }
+      response.writeHead(upstream.status, headers);
+      response.end(Buffer.from(await upstream.arrayBuffer()));
+    } catch {
+      response.writeHead(502, { "content-type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify({ error: "The APOS processing server could not be reached." }));
+    }
+    return;
+  }
   if (url.pathname === "/api/ai") {
     const body = await new Promise((resolve) => {
       let data = "";

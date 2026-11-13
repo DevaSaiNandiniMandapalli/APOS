@@ -74,7 +74,7 @@ const TOOLS: Record<string, ToolEntry> = {
   "file-inspector": { pill: "Available · browser-local file analysis", render: () => <FileInspector /> },
   "document-summary": { pill: "Available · Sarvam 105B document summary", render: () => <DocumentSummary /> },
   "ocr-pdf": { pill: "Available · browser-local OCR for scanned PDFs", render: () => <OcrPdf /> },
-  "pdf-to-office": { pill: "Available · editable Word/Excel with OCR on this device", render: () => <PdfToOffice /> },
+  "pdf-to-office": { pill: "Available · browser Word/Excel + optional server layout", render: () => <PdfToOffice /> },
   "document-to-pdf": { pill: "Available · reflowed PDF from Word or text", render: () => <OfficeConvert mode="document-to-pdf" /> },
   "spreadsheet-to-pdf": { pill: "Available · paginated PDF table", render: () => <OfficeConvert mode="spreadsheet-to-pdf" /> },
   "presentation-to-pdf": { pill: "Available · text-faithful slide export", render: () => <OfficeConvert mode="presentation-to-pdf" /> },

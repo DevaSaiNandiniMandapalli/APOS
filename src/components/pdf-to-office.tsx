@@ -5,6 +5,7 @@ import Link from "next/link";
 import { loadPdfPreview } from "@/lib/pdf-preview";
 import { extractPdfStructure, type PdfStructureMetadata } from "@/lib/pdf-structured";
 import { convertPdfToOffice, type PdfOfficeFormat, type PdfOfficeMode, type PdfOfficeResult } from "@/lib/pdf-to-office";
+import { fetchServerRegistry, runServerPdfToWord, type ServerTool } from "@/lib/server-tools";
 
 type Analysis = {
   pageCount: number;
@@ -32,6 +33,12 @@ export default function PdfToOffice() {
   const [file, setFile] = useState<File | null>(null);
   const [format, setFormat] = useState<PdfOfficeFormat>("docx");
   const [mode, setMode] = useState<PdfOfficeMode>("editable");
+  const [engine, setEngine] = useState<"browser" | "server">("browser");
+  const [serverTool, setServerTool] = useState<ServerTool | null>(null);
+  const [serverOcrAvailable, setServerOcrAvailable] = useState(false);
+  const [serverChecked, setServerChecked] = useState(false);
+  const [serverOcr, setServerOcr] = useState(false);
+  const [serverLanguage, setServerLanguage] = useState("eng");
   const [pageMode, setPageMode] = useState<"all" | "custom">("all");
   const [pageRange, setPageRange] = useState("");
   const [includeTables, setIncludeTables] = useState(true);
@@ -157,6 +164,43 @@ export default function PdfToOffice() {
     abortRef.current = controller;
     try {
       const pages = pageMode === "custom" ? pageRange : "";
+      if (format === "docx" && mode === "editable" && engine === "server") {
+        if (!serverTool) throw new Error("The layout-preserving Word engine is not available on the configured server.");
+        if (serverOcr && !serverOcrAvailable) throw new Error("OCR is not available on this processing server. Install OCRmyPDF and Tesseract, or turn OCR off.");
+        setProgress("Uploading to your APOS processing server…");
+        const output = await runServerPdfToWord(file, {
+          pages,
+          ocr: serverOcr,
+          language: serverLanguage,
+        }, controller.signal);
+        if (controller.signal.aborted || !mountedRef.current) return;
+        const blobUrl = URL.createObjectURL(output.blob);
+        urlRef.current = blobUrl;
+        const fileName = `${baseName(outputName || file.name)}.docx`;
+        setResult({
+          bytes: new Uint8Array(0),
+          fileName,
+          mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          detail: `Layout-preserving Word document generated on your APOS processing server${serverOcr ? " with OCR" : ""}. Complex layouts, unusual fonts and merged cells may still need review.`,
+          stats: {
+            pages: analysis?.pageCount ?? 0,
+            textPages: 0,
+            scannedPages: 0,
+            blankPages: 0,
+            ocrPages: serverOcr ? 1 : 0,
+            paragraphs: 0,
+            headings: 0,
+            tables: 0,
+            pictures: 0,
+            skippedFullPageImages: 0,
+            unplacedImages: 0,
+            warnings: ["This document was processed on the self-hosted APOS server, not in this browser.", "Layout-preserving conversion is an approximation; review the result before publishing."],
+          },
+          url: blobUrl,
+        });
+        setProgress("Done.");
+        return;
+      }
       const output = await convertPdfToOffice(file, {
         format,
         mode,
@@ -209,6 +253,8 @@ export default function PdfToOffice() {
     setPageMode("all");
     setPageRange("");
     setOcrScannedPages(false);
+    setServerOcr(false);
+    setEngine("browser");
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -220,6 +266,22 @@ export default function PdfToOffice() {
       abortRef.current?.abort();
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchServerRegistry(controller.signal)
+      .then((registry) => {
+        const tool = registry.tools.find((candidate) => candidate.name === "pdf_to_word") ?? null;
+        setServerTool(tool?.available ? tool : null);
+        setServerOcrAvailable(Boolean(registry.tools.find((candidate) => candidate.name === "ocr")?.available));
+        setServerChecked(true);
+      })
+      .catch(() => {
+        setServerTool(null);
+        setServerChecked(true);
+      });
+    return () => controller.abort();
   }, []);
 
   const pageSelectionError = (() => {
@@ -241,9 +303,11 @@ export default function PdfToOffice() {
   })();
 
   return <section className="office-convert" aria-labelledby="pdf-office-heading">
-    <h2 id="pdf-office-heading">Convert a PDF to editable Word or Excel on this device</h2>
-    <p>Editable Word rebuilds selectable text, headings, paragraphs, detected tables and content pictures. Complex layouts may need manual formatting. Visual Word places each PDF page in the document as a picture and is not editable. Editable Word never inserts full-page screenshots.</p>
-    <div className="privacy-note">The PDF is read in this browser. Nothing is uploaded. The converter accepts PDFs up to 25 MB and 500 pages. Image-only pages are detected individually: enable OCR to convert them to editable text, or use Visual Word for an image-based copy.</div>
+    <h2 id="pdf-office-heading">Convert a PDF to editable Word or Excel</h2>
+    <p>Editable Word rebuilds selectable text, headings, paragraphs, detected tables and content pictures. The optional layout-preserving engine uses the self-hosted APOS processing server for closer Word fidelity. Visual Word places each PDF page in the document as a picture and is not editable.</p>
+    <div className="privacy-note">{format === "docx" && mode === "editable" && engine === "server"
+      ? "Layout-preserving mode uploads this PDF to the configured APOS processing server. That server handles the file in memory or a temporary directory, uses no database, and does not keep it permanently. Browser-local mode remains available and never uploads."
+      : "The PDF is read in this browser. Nothing is uploaded. The converter accepts PDFs up to 25 MB and 500 pages. Image-only pages are detected individually: enable OCR to convert them to editable text, or use Visual Word for an image-based copy."}</div>
 
     <label className="file-picker">Choose a file
       <input ref={inputRef} type="file" accept="application/pdf,.pdf" disabled={busy} onChange={(event) => { void selectFile(event.currentTarget.files?.[0]); event.currentTarget.value = ""; }} />
@@ -304,6 +368,14 @@ export default function PdfToOffice() {
             <option value="visual">Visual Word — each page as a picture (not editable)</option>
           </select>
         </label>}
+        {format === "docx" && mode === "editable" && <label>Word engine
+          <select aria-label="Word engine" value={engine} disabled={busy} onChange={(event) => setEngine(event.target.value as "browser" | "server")}>
+            <option value="browser">Browser-local — private, structured reconstruction</option>
+            {serverTool && <option value="server">Layout-preserving server — higher Word fidelity</option>}
+          </select>
+          {!serverChecked && <span className="route-note">Checking the optional processing server…</span>}
+          {serverChecked && !serverTool && <span className="route-note">The layout-preserving engine is not configured or unavailable. <Link className="text-link" href="/server-tools">Check server tools</Link>.</span>}
+        </label>}
         <label>Pages
           <select aria-label="Pages" value={pageMode} disabled={busy} onChange={(event) => setPageMode(event.target.value as "all" | "custom")}>
             <option value="all">All pages</option>
@@ -315,12 +387,26 @@ export default function PdfToOffice() {
           <span id="office-range-help" className="route-note">Use page numbers or ranges, such as 1-3, 5.</span>
         </label>}
         {pageSelectionError && <p className="merge-error" role="alert">{pageSelectionError}</p>}
-        {format === "docx" && mode === "editable" && <>
+        {format === "docx" && mode === "editable" && engine === "browser" && <>
           <label className="office-check"><input type="checkbox" checked={includeTables} disabled={busy} onChange={(event) => setIncludeTables(event.target.checked)} /> Keep detected tables as Word tables</label>
           <label className="office-check"><input type="checkbox" checked={includePictures} disabled={busy} onChange={(event) => setIncludePictures(event.target.checked)} /> Include content pictures (never full-page scans or backgrounds)</label>
           <label className="office-check"><input type="checkbox" checked={pageBreaks} disabled={busy} onChange={(event) => setPageBreaks(event.target.checked)} /> Keep PDF page boundaries and source page sizes</label>
           <label className="office-check"><input type="checkbox" checked={ocrScannedPages} disabled={busy} onChange={(event) => setOcrScannedPages(event.target.checked)} /> OCR image-only pages (English, slower; first use downloads the model)</label>
           <p className="route-note">If image-only pages are found and OCR is off, conversion stops with the affected page numbers. It never inserts screenshots into Editable Word.</p>
+        </>}
+        {format === "docx" && mode === "editable" && engine === "server" && <>
+          <label className="office-check"><input type="checkbox" checked={serverOcr} disabled={busy || !serverOcrAvailable} onChange={(event) => setServerOcr(event.target.checked)} /> OCR scanned pages on the server</label>
+          {!serverOcrAvailable && <p className="route-note">Server OCR needs OCRmyPDF and Tesseract. Text PDFs can still use layout conversion.</p>}
+          {serverOcr && <label>OCR language
+            <select value={serverLanguage} disabled={busy} onChange={(event) => setServerLanguage(event.target.value)}>
+              <option value="eng">English</option>
+              <option value="hin">Hindi</option>
+              <option value="deu">German</option>
+              <option value="fra">French</option>
+              <option value="spa">Spanish</option>
+            </select>
+          </label>}
+          <p className="route-note">The server uses a layout-reconstruction engine. It generally preserves columns, tables, images and styling better than browser text extraction, but complex layouts still need review.</p>
         </>}
         {format === "xlsx" && <p className="route-note">Each detected table becomes a worksheet; an extracted-text worksheet is always included. Cell values are written as text, not formulas.</p>}
         <label>Output filename

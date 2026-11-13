@@ -49,6 +49,17 @@ def test_pdf_to_word_produces_a_real_docx() -> None:
     assert any("alex@example.com" in paragraph.text for paragraph in document.paragraphs)
 
 
+def test_pdf_to_word_honours_a_page_range() -> None:
+    response = post("pdf_to_word", [("files", ("text.pdf", text_pdf(), "application/pdf"))], {"pages": "2"})
+    assert response.status_code == 200, response.text
+    import docx
+
+    document = docx.Document(io.BytesIO(response.content))
+    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    assert "Second page" in text
+    assert "alex@example.com" not in text
+
+
 def test_pdf_to_excel_and_powerpoint_open_with_their_libraries() -> None:
     excel = post("pdf_to_excel", [("files", ("text.pdf", text_pdf(), "application/pdf"))])
     assert excel.status_code == 200, excel.text

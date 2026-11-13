@@ -436,6 +436,23 @@ export function buildDocxDocument(
 }
 
 /** Checks a generated .docx package before it is offered to the user. */
+function resolvePackagePath(base: string, target: string): string | null {
+  if (target.startsWith("/") || target.includes("\\")) return null;
+  const parts = `${base}/${target}`.split("/");
+  const stack: string[] = [];
+  for (const part of parts) {
+    if (!part || part === ".") continue;
+    if (part === "..") {
+      if (!stack.length) return null;
+      stack.pop();
+      continue;
+    }
+    stack.push(part);
+  }
+  return stack.length ? stack.join("/") : null;
+}
+
+/** Checks a generated .docx package before it is offered to the user. */
 export function validateDocxDocument(bytes: Uint8Array) {
   const entries = unzipOffice(bytes);
   if (!entries) throw new Error("The generated Word file is not a readable ZIP package.");
@@ -448,8 +465,11 @@ export function validateDocxDocument(bytes: Uint8Array) {
     const relXml = new TextDecoder().decode(rels);
     for (const match of relXml.matchAll(/<Relationship\b[^>]*Target="([^"]+)"/g)) {
       const target = match[1];
-      if (/^https?:/i.test(target) || target.startsWith("..")) throw new Error("The generated Word file contains an unsafe relationship target.");
-      const path = `word/${target.replace(/^\/?word\//, "").replace(/^\.\//, "")}`;
+      const external = /^(?:https?|mailto|tel|data):/i.test(target) || target.startsWith("#");
+      if (external) continue;
+      if (/^[a-zA-Z]:[\\/]/.test(target)) throw new Error("The generated Word file contains an unsafe relationship target.");
+      const path = resolvePackagePath("word", target);
+      if (!path) throw new Error("The generated Word file contains an unsafe relationship target.");
       const media = entries[path];
       if (!media) throw new Error("The generated Word file is missing a related media part.");
       if (path.startsWith("word/media/")) {
