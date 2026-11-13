@@ -68,6 +68,15 @@ npm.cmd run build
 
 `NEXT_PUBLIC_APOS_API_URL` is public and embedded in the client. If it is blank, the frontend uses same-origin `/api/v1`, which works when a reverse proxy serves both the static app and the API.
 
+The included preview server can provide that same-origin proxy for a single-tunnel or single-port deployment:
+
+```powershell
+$env:APOS_PROCESSING_ORIGIN="http://127.0.0.1:8000"
+npm.cmd run serve:static
+```
+
+`APOS_PROCESSING_ORIGIN` is only read by `scripts/serve-static.mjs`; without it, `/api/v1/*` returns a clear “processing server is not configured” response and browser-local tools are unaffected.
+
 The API only accepts cross-origin requests from `CORS_ORIGINS`:
 
 ```powershell
