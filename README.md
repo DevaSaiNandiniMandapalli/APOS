@@ -24,7 +24,7 @@ backend/.venv/Scripts/python.exe -m pip install -e "backend[test]"
 backend/.venv/Scripts/python.exe -m uvicorn apos_api.main:app --app-dir backend --reload
 ```
 
-The only API route implemented in Phase 1 is `GET /api/v1/health`. Interactive API documentation is at `/api/docs`. Processing and upload endpoints are intentionally absent.
+The API now includes the optional self-hosted processing service. `GET /api/v1/health` remains available; `GET /api/v1/tools` and the processing routes are documented in `docs/SELF-HOSTING-SERVER-TOOLS.md`. Interactive API documentation is at `/api/docs`. The browser app does not require the processing server, and no database or persistent file storage is used.
 
 ## Checks
 
@@ -50,8 +50,10 @@ backend/.venv/Scripts/python.exe -m pytest backend/tests
 - The studio definitions in `src/lib/registry.ts` are the canonical source for derived studio IDs and navigation. Runtime Zod validation checks IDs, statuses, explanations, and references.
 - Available PDF tools include Merge, Split, Rotate, Reorder, Delete, Extract, Duplicate, Add Blank Pages, structural Compress, PDF to Images, PDF to Text, PDF to HTML, PDF to Office, Images to PDF, text/image Watermark, Page Numbers, supported Metadata inspection/editing, and AES-256 Protect PDF. PDF-to-text batches support up to 20 files with bounded concurrency. PDF-to-Office rebuilds structured headings, paragraphs, tables and content pictures into editable Word, or detected tables and text into Excel. Editable Word never falls back to full-page screenshots; image-only pages are reported for OCR, and Visual Word is a separate non-editable page-picture mode. Unlocking, signatures, secure redaction, general repair, and broader optimization remain planned with limitations recorded in `docs/PHASE-2.md`. Other catalogue tools remain planned unless their status says otherwise. A directory card alone never indicates availability.
 - Browser-local processing uses `@cantoo/pdf-lib`, `pdfjs-dist`, `fflate` and the existing Office helpers; see the lockfile for exact resolved versions. PDF-to-text and PDF-to-HTML use PDF.js; DOCX/XLSX packages are generated and structurally validated in the browser. Run `npm.cmd audit --audit-level=high` before dependency releases.
+- The optional `backend/apos_processing` package (adapted from the MIT-licensed pdfsmith code supplied for APOS) powers native server tools. See `docs/SELF-HOSTING-SERVER-TOOLS.md`. Those tools are only rendered on `/server-tools` after the configured FastAPI service is reachable; they do not change the browser-local registry status of the 39 local tools.
 - `backend/` contains a modular FastAPI application. There is no database, queue, persistent file storage, account system, or file-processing route.
 - `docs/PHASE-1.md` records the implementation boundary and remaining roadmap.
 - `docs/PHASE-2-PLAN.md` defines the incremental PDF Essentials plan and its release gates.
 - `docs/PHASE-3.md` records the PDF Conversion Studio audit, capabilities, limits and verification results.
+- `docs/SELF-HOSTING-SERVER-TOOLS.md` documents the optional FastAPI processing service, its native dependencies, API and privacy model.
 - **Permanent principle:** 100% functionality, no dead buttons, no fake features. See Section 16 of `AGENTS.md`; every phase ends with a full UI control and route audit.

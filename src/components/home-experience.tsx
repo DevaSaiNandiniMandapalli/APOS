@@ -98,7 +98,7 @@ export default function Home() {
         <section className="answer-box home-answer" aria-labelledby="what-is-apos">
           <div className="section-eyebrow">WHAT APOS IS</div>
           <h2 id="what-is-apos">A document workspace where your files stay on your device</h2>
-          <p>APOS gathers {toolDefinitions.length} PDF and Office tools into {studioDefinitions.length} studios: merge, split, rotate, reorder and extract PDF pages, compress, repair and optimise broken files, run OCR on scans, convert PDF to Word or Excel and back, protect documents with AES-256, draft and summarise text with AI, and build repeatable workflows. Every available tool runs locally in your browser, so nothing is uploaded and no account is needed.</p>
+          <p>APOS gathers {toolDefinitions.length} PDF and Office tools into {studioDefinitions.length} studios: merge, split, rotate, reorder and extract PDF pages, compress, repair and optimise broken files, run OCR on scans, convert PDF to Word or Excel and back, protect documents with AES-256, draft and summarise text with AI, and build repeatable workflows. Every available registry tool runs locally in your browser, so nothing is uploaded and no account is needed. An optional self-hosted server adds native engines for advanced Office and PDF operations; those tools are kept on a clearly labelled server-tools page.</p>
           <ul className="answer-points">
             <li><strong>{toolDefinitions.filter((tool) => tool.status === "available").length} tools ready now</strong><span>Each one tested with real files before it was listed as available.</span></li>
             <li><strong>No uploads</strong><span>WebAssembly and web workers process documents on your own machine.</span></li>

@@ -13,8 +13,7 @@ export default function SiteFooter({ excludeStudio, excludeTool }: { excludeStud
             <span className="brand-mark small"><span /><span /><span /><span /></span> apos<span className="brand-dot">.</span>
           </Link>
           <p>Private document work:{" "}
-            {toolDefinitions.filter((tool) => tool.status === "available").length} working tools, thirty-nine in all,
-            each running inside your browser.
+            {toolDefinitions.filter((tool) => tool.status === "available").length} browser-local tools, plus optional self-hosted server engines for native conversions.
           </p>
         </div>
         <nav className="site-footer-col" aria-label="Popular tools">
@@ -37,6 +36,7 @@ export default function SiteFooter({ excludeStudio, excludeTool }: { excludeStud
           <h2>Explore</h2>
           <div className="site-footer-links">
             <div><Link href="/studios">All studios</Link></div>
+            <div><Link href="/server-tools">Server tools</Link></div>
             <div><Link href="/faq">Questions &amp; answers</Link></div>
             <div><Link href="/llms.txt">llms.txt for AI assistants</Link></div>
             <div><Link href="/sitemap.xml">Sitemap</Link></div>
@@ -45,7 +45,7 @@ export default function SiteFooter({ excludeStudio, excludeTool }: { excludeStud
       </div>
       <div className="site-footer-base">
         <span>© 2026 APOS</span>
-        <span className="site-footer-note">Files stay on your device · No accounts · No tracking scripts</span>
+        <span className="site-footer-note">Browser tools stay on your device - server tools are explicitly labelled</span>
       </div>
     </footer>
   );

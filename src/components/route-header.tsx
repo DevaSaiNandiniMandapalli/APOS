@@ -78,6 +78,7 @@ export default function RouteHeader({ title, section }: { title: string; section
 
         <Link className="primary-link" href="/faq">Answers</Link>
         <Link className="primary-link" href="/studios">Directory</Link>
+        <Link className="primary-link" href="/server-tools">Server tools</Link>
       </nav>
 
       <div className="top-actions">
@@ -105,6 +106,7 @@ export default function RouteHeader({ title, section }: { title: string; section
           <p className="nav-panel-title">Main</p>
           <Link href="/" onClick={closeMenus}>Overview</Link>
           <Link href="/studios" onClick={closeMenus}>All studios</Link>
+          <Link href="/server-tools" onClick={closeMenus}>Server tools</Link>
           <Link href="/faq" onClick={closeMenus}>Questions &amp; answers</Link>
           <p className="nav-panel-title">Studios</p>
           <div className="nav-sheet-grid">

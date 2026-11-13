@@ -10,6 +10,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE.url}/`, lastModified, changeFrequency: "weekly", priority: 1 },
     { url: `${SITE.url}/studios`, lastModified, changeFrequency: "weekly", priority: 0.9 },
     { url: `${SITE.url}/faq`, lastModified, changeFrequency: "monthly", priority: 0.7 },
+    { url: `${SITE.url}/server-tools`, lastModified, changeFrequency: "monthly", priority: 0.5 },
   ];
   const studios: MetadataRoute.Sitemap = studioDefinitions.map((studio) => ({
     url: `${SITE.url}/studios/${studio.id}`,

@@ -78,13 +78,14 @@ npx wrangler deploy --dry-run
 
 Results from the PDF-to-Word fix verification:
 
-- `npm.cmd test` — 307 tests passed across 42 files.
-- `npm.cmd run typecheck` — passed.
-- `npm.cmd run lint` — 0 errors; 29 warnings, dominated by existing `<img>` notices for canvas/data-URL previews and pre-existing unused-variable warnings.
-- `npm.cmd run build` — passed; 64 static routes generated.
-- Focused PDF/Office Playwright run — 29 passed.
-- Full Playwright suite `npx playwright test --workers=2` — 157 passed.
-- `npx wrangler deploy --dry-run` — passed; the Worker and static assets bundle without errors.
+- `npm.cmd test` - 309 tests passed across 43 files.
+- `npm.cmd run typecheck` - passed.
+- `npm.cmd run lint` - 0 errors; 29 warnings, dominated by existing `<img>` notices for canvas/data-URL previews and pre-existing unused-variable warnings.
+- `npm.cmd run build` - passed; 65 static routes generated, including `/server-tools`.
+- Focused PDF/Office Playwright run - 29 passed.
+- Full Playwright suite `npx playwright test --workers=2` - 159 passed, 1 skipped (the real FastAPI integration test requires `APOS_LIVE_BACKEND=1`). The skipped test passed separately against the live local backend.
+- `backend/.venv/Scripts/python.exe -m pytest backend/tests -q` - 17 passed.
+- `npx wrangler deploy --dry-run` - passed; the Worker and static assets bundle without errors.
 
 The regression fixture was downloaded through the real PDF-to-Office UI and reopened with Python `python-docx`. All five `PAGE_MARKER_1`–`PAGE_MARKER_5` markers appeared exactly once and in order; the DOCX contained one 180 × 120 pt content image on page 3, no page-sized screenshots, four page breaks, a real Word table in the table fixture, and editable identity-transform page 4 text. The Universal Converter produced the same result. A hybrid PDF with image-only pages 3–5 stopped with those page numbers and no download. With OCR enabled, the image-only page produced editable text and no page media. These Python packages are external verifiers and are not project dependencies.
 
@@ -92,4 +93,8 @@ The regression fixture was downloaded through the real PDF-to-Office UI and reop
 
 The tools are useful for real conversion, but they are not a replacement for a full desktop layout engine. PDF text extraction cannot reconstruct glyph-perfect typography, complex columns, rotated text, form fields, annotations or every embedded picture. Visual Word is a page-image mode and is not editable; Editable Word never falls back to page screenshots. HTML layout mode approximates positions with CSS and remains responsive, so it may reflow. Scanned documents remain OCR-dependent and are reported page by page.
 
-No processing endpoint, upload endpoint, database, account system or server-side document retention was introduced. The static-export and Cloudflare Worker architecture is unchanged.
+The browser-local PDF Conversion Studio introduced no database, account system, server-side document retention or automatic upload path. The static-export and Cloudflare Worker architecture is unchanged for browser tools.
+
+## Optional server processing bridge
+
+A separate, optional FastAPI service now lives under `backend/`. It vendors the MIT-licensed APOS/pdfsmith processing code supplied for this project and exposes advanced native engines (LibreOffice, Ghostscript, pyHanko, OCRmyPDF, WeasyPrint, pdf2docx and pdfplumber) at `/api/v1/tools`. The current branded frontend consumes it through the clearly labelled `/server-tools` page. Browser-local registry tools remain browser-local and unchanged. See `docs/SELF-HOSTING-SERVER-TOOLS.md` for setup, deployment, limits and the privacy distinction.

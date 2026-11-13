@@ -14,7 +14,7 @@ def test_health_returns_service_status() -> None:
     response = asyncio.run(get("/api/v1/health"))
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "service": "apos-api", "version": "0.1.0"}
+    assert response.json() == {"status": "ok", "service": "apos-api", "version": "0.2.0"}
 
 
 def test_unreserved_processing_routes_are_absent() -> None:
