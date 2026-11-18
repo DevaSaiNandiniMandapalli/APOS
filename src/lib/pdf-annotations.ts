@@ -114,7 +114,7 @@ export const ANNOTATION_TOOL_LABELS: Record<AnnotationTool, string> = {
   line: "Line",
   arrow: "Arrow",
   "text-box": "Text box",
-  "text-edit": "Replace text",
+  "text-edit": "Cover & replace text",
   image: "Image overlay",
 };
 

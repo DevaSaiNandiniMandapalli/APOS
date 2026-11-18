@@ -8,6 +8,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import Link from "next/link";
 import { TextLayer } from "pdfjs-dist";
 import type {
   PDFDocumentLoadingTask,
@@ -1361,6 +1362,15 @@ export default function PdfViewer() {
           {meaningfulAnnotationCount === 0 && (
             <p className="route-note">
               Add at least one annotation to enable the edited PDF download.
+            </p>
+          )}
+
+          {annotations.some((annotation) => annotation.kind === "text-edit") && (
+            <p className="route-note">
+              Cover &amp; replace paints over the original text so the page reads correctly, but the
+              original text layer stays inside the file. Use{" "}
+              <Link className="text-link" href="/tools/redact-pdf">Redact PDF</Link> when the old text must
+              be unrecoverable.
             </p>
           )}
 

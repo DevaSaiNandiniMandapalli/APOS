@@ -6,7 +6,6 @@ export default function StructuredData({ data }: { data: unknown | readonly unkn
         <script
           key={index}
           type="application/ld+json"
-          // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: JSON.stringify(block).replace(/</g, "\\u003c") }}
         />
       ))}

@@ -464,7 +464,7 @@ export default function DocumentEditor({
         setReopenError(reason instanceof Error ? reason.message : "That file could not be opened.");
       }
     },
-    [saveStatus, applyDocument, clearDocument],
+    [saveStatus, applyDocument],
   );
 
   const handleReopenOpenPicker = useCallback(() => {

@@ -457,7 +457,6 @@ export function lexicalJSONToDocument(
 
   for (const node of state.root.children as LexicalNodeJSON[]) {
     if (node.type === "list") {
-      const listType = node.listType as "bullet" | "number";
       const items = node.children as LexicalNodeJSON[];
       for (const item of items) {
         blocks.push(nodeToBlock(item) as ListItemBlock);

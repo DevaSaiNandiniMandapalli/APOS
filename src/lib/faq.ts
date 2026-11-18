@@ -19,7 +19,7 @@ export const siteFaqs: Faq[] = [
   },
   {
     question: "Which tools work today?",
-    answer: `Today's working set covers merging, splitting, rotating, reordering, deleting, extracting and duplicating PDF pages, adding blank pages, compressing, repairing, optimising, protecting with AES-256, OCR, PDF to Word or Excel, images to PDF, PDF to images, PDF to text, metadata editing, spreadsheet and presentation to PDF, the document editor, the AI assistant, the AI document agent, the universal converter, the workflow builder and the file inspector.`,
+    answer: `Today's working set covers merging, splitting, rotating, reordering, deleting, extracting and duplicating PDF pages, adding blank pages, compressing, repairing, optimising, protecting with AES-256, OCR that produces a searchable PDF or plain text, PDF to Word or Excel, images to PDF, PDF to images, PDF to text, metadata editing, spreadsheet and presentation to PDF, the document editor, the AI assistant, the AI document agent, the universal converter, the workflow builder that runs its steps on your files, and the file inspector.`,
   },
   {
     question: "What are the file size limits?",

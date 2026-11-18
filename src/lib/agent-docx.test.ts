@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { unzipSync, strToU8 } from "fflate";
+import { unzipSync } from "fflate";
 import { buildAgentDocx, blocksToPlainText, parseMarkdownBlocks } from "./agent-docx";
 import { readDocxParagraphs } from "./office-formats";
 

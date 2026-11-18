@@ -75,12 +75,12 @@ export default function Home() {
           <div className="ticker-track">
           {[0, 1].map((copy) => <div className="ticker-group" key={copy} aria-hidden={copy === 1 ? "true" : undefined}>
             {[
-              ["38", "tools, one workspace"],
-              ["No uploads", "everything runs in your browser"],
+              [String(toolDefinitions.length), "tools, one workspace"],
+              ["No file uploads", "documents stay on your device"],
               ["PDF ↔ Word ↔ Excel", "real files, not screenshots"],
               ["Sarvam 105B", "summaries and document drafting"],
-              ["OCR", "scans become text"],
-              ["Automations", "chain the steps you repeat"],
+              ["OCR", "scans become searchable PDFs"],
+              ["Automations", "run the steps you repeat"],
               ["Honest badges", "we say when a tool is not ready"],
             ].map(([title, copyText]) => <span className="ticker-item" key={title}><i/><strong>{title}</strong> {copyText}</span>)}
           </div>)}
@@ -98,10 +98,10 @@ export default function Home() {
         <section className="answer-box home-answer" aria-labelledby="what-is-apos">
           <div className="section-eyebrow">WHAT APOS IS</div>
           <h2 id="what-is-apos">A document workspace where your files stay on your device</h2>
-          <p>APOS gathers {toolDefinitions.length} PDF and Office tools into {studioDefinitions.length} studios: merge, split, rotate, reorder and extract PDF pages, compress, repair and optimise broken files, run OCR on scans, convert PDF to Word or Excel and back, protect documents with AES-256, draft and summarise text with AI, and build repeatable workflows. Every available registry tool runs locally in your browser, so nothing is uploaded and no account is needed. An optional self-hosted server adds native engines for advanced Office and PDF operations; those tools are kept on a clearly labelled server-tools page.</p>
+          <p>APOS gathers {toolDefinitions.length} PDF and Office tools into {studioDefinitions.length} studios: merge, split, rotate, reorder and extract PDF pages, compress, repair and optimise broken files, run OCR on scans, convert PDF to Word or Excel and back, protect documents with AES-256, draft and summarise text with AI, and build repeatable workflows. Every document tool runs locally in your browser, so your files are never uploaded and no account is needed. The three AI writing tools are the only exception: they send the text you submit to Sarvam 105B. An optional self-hosted server adds native engines for advanced Office and PDF operations; those tools are kept on a clearly labelled server-tools page.</p>
           <ul className="answer-points">
             <li><strong>{toolDefinitions.filter((tool) => tool.status === "available").length} tools ready now</strong><span>Each one tested with real files before it was listed as available.</span></li>
-            <li><strong>No uploads</strong><span>WebAssembly and web workers process documents on your own machine.</span></li>
+            <li><strong>No file uploads</strong><span>WebAssembly and web workers process documents on your own machine.</span></li>
             <li><strong>Measured results</strong><span>Compression, repair and optimisation report real bytes and pages, verified by re-opening the output.</span></li>
           </ul>
           <Link className="text-link" href="/studios">Browse all studios and tools <ArrowRight size={15}/></Link>

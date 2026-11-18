@@ -97,6 +97,55 @@ docker run --rm -p 8000:8000 --name apos-processing `
 
 The server can also be deployed behind HTTPS on Render, Fly.io, a VPS or any container host. Cloudflare's static Worker deployment does **not** run these native binaries; the static site can point at a separately hosted API URL, or server tools remain unavailable there.
 
+## Current production setup for apos.nxtgensec.org
+
+The static site is deployed to Cloudflare Workers. The processing API is **not** hosted yet, so `/server-tools` correctly reports that no server is configured.
+
+Two ready-made paths:
+
+### A. Cloudflare Tunnel to a machine you control (fastest, not always-on)
+
+```powershell
+# Window 1
+powershell -ExecutionPolicy Bypass -File scripts\serve-api.ps1
+
+# Window 2 - first run opens a browser for `cloudflared login`
+powershell -ExecutionPolicy Bypass -File scripts\tunnel-apos-api.ps1
+```
+
+That publishes the API at `https://api.nxtgensec.org`. Then rebuild the site so it knows the URL, and redeploy:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build-with-server.ps1
+npx wrangler deploy
+```
+
+The tunnel only serves while the machine is on and both windows are running. Good for demos and internal use; not a production SLA.
+
+### B. A container host (always-on)
+
+`backend/Dockerfile` already installs LibreOffice, Ghostscript, Tesseract, OCRmyPDF and WeasyPrint's native libraries, so all 32 tools become available instead of 26.
+
+1. Deploy `backend/` to Render, Fly.io, Railway or a VPS as a Docker service.
+2. Set `CORS_ORIGINS=https://apos.nxtgensec.org`.
+3. Build and deploy the site with that URL:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build-with-server.ps1 -ApiUrl "https://your-api-host"
+npx wrangler deploy
+```
+
+### Verifying whichever you choose
+
+```powershell
+curl.exe https://api.nxtgensec.org/api/v1/health
+curl.exe https://api.nxtgensec.org/api/v1/tools
+```
+
+`/api/v1/tools` lists every tool with an `available` flag and an `unavailable_hint`, so a missing binary is visible rather than silently failing.
+
+On the Windows development machine, 26 of 32 tools are available; `office_to_pdf`, `ocr`, `html_to_pdf` and `pdf_to_pdfa` need LibreOffice, OCRmyPDF/Tesseract, WeasyPrint's native libraries and Ghostscript, and `summarize`/`translate` need `ANTHROPIC_API_KEY`. The Docker image supplies the binaries.
+
 ## Configuration
 
 | Variable | Default | Purpose |

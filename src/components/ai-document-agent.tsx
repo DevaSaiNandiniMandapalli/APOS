@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { extractDocumentText, isSupportedDocumentName, SUMMARY_INPUT_LIMIT } from "@/lib/document-text";
+import { extractDocumentText, SUMMARY_INPUT_LIMIT } from "@/lib/document-text";
 import { buildAgentDocx, blocksToPlainText, parseMarkdownBlocks } from "@/lib/agent-docx";
 
 const PRESETS: { label: string; instructions: string }[] = [

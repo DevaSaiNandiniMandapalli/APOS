@@ -43,6 +43,42 @@ Both the PDF to Office tool and the universal converter call `convertPdfToOffice
 
 The regression fixture in `e2e/pdf-word-regression.spec.ts` covers a five-page document with `PAGE_MARKER_1`–`PAGE_MARKER_5`, a normal content image on page 3, an identity-transform image on page 4, a hybrid text/image-only PDF, OCR, Visual Word and the universal converter. Downloaded DOCX files are reopened in the tests and inspected as ZIP/XML packages.
 
+## Paragraph reconstruction
+
+Real-world documents rarely carry usable bold metadata: pdf.js only exposes `bold` when the PDF font descriptor sets it, and many exported PDFs (resumes, reports from design tools) omit it entirely. The extractor therefore cannot rely on bold alone.
+
+`buildTextBlocks` in `src/lib/pdf-structured.ts` now combines five independent signals:
+
+1. **Headings** — a short line that is ALL CAPS and at least 2% larger than the body size is a level-3 heading. This catches the common 11pt-over-10pt resume pattern that previously produced no headings at all.
+2. **Bullets** — every list line starts its own block.
+3. **Outdent** — a line starting further left than the block it would join begins a new entry (a job title after an indented bullet).
+4. **Short previous line** — a wrapped line fills the text column, so a line that stops more than four characters short of the column's right edge ended a paragraph. This is the most reliable signal when no font metadata exists.
+5. **Closed label** — a line ending in `)`, `]`, `:` or `;` followed by a capitalised line starts a new block.
+
+Before this change a five-section resume converted to 19 paragraphs with every heading, bullet and job title glued into walls of text. After it, the same file produces 45 paragraphs, all seven section headings carry real Word heading styles, and no content is lost.
+
+### Visual fidelity
+
+Three further defects were fixed after inspecting a real resume:
+
+- **Invented table borders.** Detected tables were always emitted with a full grid. The source PDF had no borders, so the Word file gained lines that were never there. A table is now bordered only when at least two stroked vertical rules cross its own rows (`detectVerticalRules` + `tableHasBorders`); clipping paths, filled-only paths, white strokes and rules outside the table are ignored. A resume stays clean while a real timetable keeps its grid.
+- **Fake bullets.** List lines kept their literal `•` character, so Word saw plain paragraphs. Bullets and numbers are now converted to real Word numbering (`word/numbering.xml`, `w:numPr`), which means the list can be restyled and renumbered.
+- **Missing section rules.** The source drew a horizontal rule under every section heading. Those rules are now read from the PDF operator list (`detectHorizontalRules` decodes pdf.js `DrawOPS` path buffers), matched to the heading above them, and emitted as a paragraph bottom border. Page-edge borders and short underlines are ignored.
+- **Body size.** Paragraphs now carry the source font size (10pt in the resume) instead of falling back to Word's 11pt default.
+- **Equal table columns.** Every column used to get the same width, so a two-column education table gave the date half the page. Columns are now sized by their longest cell.
+
+## Word to PDF
+
+The browser engine used to flatten every document to Helvetica 11pt in one colour, and it replaced `•` with `-`. It now reads the DOCX properly:
+
+- `readDocxRichBlocks` parses each `<w:r>` run's `<w:rPr>` for bold, italic, `<w:sz>` (half-points) and `<w:color>`, plus paragraph `<w:pStyle>` heading level, `<w:jc>` alignment and `<w:numPr>` bullets.
+- `buildRichDocPdf` renders those runs with the matching Helvetica face, the source size and the source colour, centres or right-aligns the line, and draws a real `•` bullet.
+- Neighbouring words that share formatting are merged into one text operation, so the PDF text layer keeps whole phrases instead of one word per draw call.
+
+Verified on a 22-page Word document: the cover title renders at 18pt in `#ED7D31`, the main heading at 30pt in `#17365D`, the subtitle at 13pt in `#464646`, body text at 9.5pt, and the `•` separators survive.
+
+This is still a **reflow**, not a layout engine: columns, floating shapes, table fills and exact page breaks are not reproduced. For a page-for-page match the optional server engine (`office_to_pdf`, LibreOffice) is required, and the Word to PDF page offers it as a separate engine when the processing server reports it available.
+
 ## Security and privacy
 
 - File signatures are checked before processing. File names and MIME types are not trusted.
@@ -78,13 +114,13 @@ npx wrangler deploy --dry-run
 
 Results from the PDF-to-Word fix verification:
 
-- `npm.cmd test` - 310 tests passed across 43 files.
+- `npm.cmd test` - 331 tests passed across 46 files.
 - `npm.cmd run typecheck` - passed.
-- `npm.cmd run lint` - 0 errors; 29 warnings, dominated by existing `<img>` notices for canvas/data-URL previews and pre-existing unused-variable warnings.
+- `npm.cmd run lint` - 0 errors, 0 warnings.
 - `npm.cmd run build` - passed; 65 static routes generated, including `/server-tools`.
 - Focused PDF/Office Playwright run - 29 passed.
-- Full Playwright suite `npx playwright test --workers=2` - 161 passed, 2 skipped (the real FastAPI integration tests require `APOS_LIVE_BACKEND=1`). The skipped tests passed separately against the live local backend.
-- `backend/.venv/Scripts/python.exe -m pytest backend/tests -q` - 18 passed.
+- Full Playwright suite `npx playwright test --workers=2` - 173 passed, 2 skipped (the real FastAPI integration tests require `APOS_LIVE_BACKEND=1`). The skipped tests passed separately against the live local backend.
+- `backend/.venv/Scripts/python.exe -m pytest backend/tests -q` - 18 passed, including on pypdf 7.0.1.
 - `npx wrangler deploy --dry-run` - passed; the Worker and static assets bundle without errors.
 
 The regression fixture was downloaded through the real PDF-to-Office UI and reopened with Python `python-docx`. All five `PAGE_MARKER_1`–`PAGE_MARKER_5` markers appeared exactly once and in order; the DOCX contained one 180 × 120 pt content image on page 3, no page-sized screenshots, four page breaks, a real Word table in the table fixture, and editable identity-transform page 4 text. The Universal Converter produced the same result. A hybrid PDF with image-only pages 3–5 stopped with those page numbers and no download. With OCR enabled, the image-only page produced editable text and no page media. These Python packages are external verifiers and are not project dependencies.
