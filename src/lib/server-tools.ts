@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { validateDocxDocument } from "./office-formats";
+import { checkPdfHeader } from "./pdf-limits";
 
 const optionSchema = z.object({
   name: z.string().min(1),
@@ -129,6 +130,21 @@ export async function runServerPdfToWord(
   const bytes = new Uint8Array(await output.blob.arrayBuffer());
   validateDocxDocument(bytes);
   if (bytes.byteLength > 100 * 1024 * 1024) throw new Error("The server produced a Word file larger than the 100 MB limit.");
+  return { blob: output.blob, filename: output.filename, bytes: bytes.byteLength };
+}
+
+/**
+ * Converts an Office document to PDF with the server's LibreOffice engine, which
+ * preserves fonts, colours, tables, images and page breaks instead of reflowing
+ * the text.
+ */
+export async function runServerOfficeToPdf(file: File, signal?: AbortSignal) {
+  const form = new FormData();
+  form.append("files", file, file.name);
+  const output = await runServerTool("office_to_pdf", form, signal);
+  const bytes = new Uint8Array(await output.blob.arrayBuffer());
+  if (!checkPdfHeader(bytes)) throw new Error("The server returned a file that is not a PDF.");
+  if (bytes.byteLength > 100 * 1024 * 1024) throw new Error("The server produced a PDF larger than the 100 MB limit.");
   return { blob: output.blob, filename: output.filename, bytes: bytes.byteLength };
 }
 

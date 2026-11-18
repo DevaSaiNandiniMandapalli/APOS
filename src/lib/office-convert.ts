@@ -1,5 +1,5 @@
-import { OFFICE_LIMITS, readDocxBlocks, readPptxSlides, readXlsxRows } from "./office-formats";
-import { buildBlocksPdf, buildParagraphPdf, buildSlidesPdf, buildTablePdf } from "./office-pdf";
+import { OFFICE_LIMITS, readDocxRichBlocks, readPptxSlides, readXlsxRows } from "./office-formats";
+import { buildParagraphPdf, buildRichDocPdf, buildSlidesPdf, buildTablePdf } from "./office-pdf";
 
 export type OfficeMode = "document-to-pdf" | "spreadsheet-to-pdf" | "presentation-to-pdf";
 
@@ -95,20 +95,28 @@ export async function convertOffice(
   if (mode === "document-to-pdf") {
     onProgress("Reading the document…");
     const isDocx = /\.docx$/i.test(file.name);
-    const blocks = isDocx
-      ? readDocxBlocks(buffer)
-      : paragraphsFromPlainText(new TextDecoder().decode(buffer)).map((text) => ({ kind: "text" as const, text }));
+    if (isDocx) {
+      const blocks = readDocxRichBlocks(buffer);
+      if (!blocks.length) throw new Error("This document has no readable content.");
+      if (blocks.length > OFFICE_LIMITS.maxParagraphs) throw new Error(`This document has more than ${OFFICE_LIMITS.maxParagraphs} items. Split it first.`);
+      onProgress("Laying out the PDF…");
+      const pictures = blocks.filter((block) => block.kind === "image").length;
+      return {
+        bytes: await buildRichDocPdf(blocks, name),
+        fileName: `${name}.pdf`,
+        mime: MIME.pdf,
+        detail: `${blocks.length} item(s) reflowed into a new PDF with the source fonts, sizes, colours and bullets${pictures ? `, including ${pictures} picture(s)` : ""}.`,
+      };
+    }
+    const blocks = paragraphsFromPlainText(new TextDecoder().decode(buffer)).map((text) => ({ kind: "text" as const, text }));
     if (!blocks.length) throw new Error("This document has no readable content.");
     if (blocks.length > OFFICE_LIMITS.maxParagraphs) throw new Error(`This document has more than ${OFFICE_LIMITS.maxParagraphs} items. Split it first.`);
     onProgress("Laying out the PDF…");
-    const pictures = blocks.filter((block) => block.kind === "image").length;
     return {
-      bytes: isDocx ? await buildBlocksPdf(blocks, name) : await buildParagraphPdf(blocks.map((block) => (block.kind === "text" ? block.text : "")), name),
+      bytes: await buildParagraphPdf(blocks.map((block) => block.text), name),
       fileName: `${name}.pdf`,
       mime: MIME.pdf,
-      detail: isDocx
-        ? `${blocks.length} item(s) reflowed into a new PDF${pictures ? `, including ${pictures} picture(s)` : ""}.`
-        : `${blocks.length} paragraph(s) reflowed into a new PDF.`,
+      detail: `${blocks.length} paragraph(s) reflowed into a new PDF.`,
     };
   }
 
