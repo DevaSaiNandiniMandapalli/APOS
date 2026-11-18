@@ -12,6 +12,10 @@
     "run_worker_first": ["/api/*"]
   },
   "observability": { "enabled": true },
+  "vars": {
+    "AI_RATE_LIMIT": "20",
+    "AI_RATE_WINDOW_SECONDS": "600"
+  },
   "workers_dev": true,
   "routes": [{ "pattern": "apos.nxtgensec.org", "custom_domain": true }]
 }

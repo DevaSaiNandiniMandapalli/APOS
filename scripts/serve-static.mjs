@@ -33,6 +33,35 @@ const existing = async (path) => {
   }
 };
 
+// Cloudflare applies out/_headers to static assets. Mirror that here so the
+// Playwright suite exercises the real Content-Security-Policy.
+let headerRules = [];
+try {
+  const text = await readFile(join(ROOT, "_headers"), "utf8");
+  let current = null;
+  for (const raw of text.split(/\r?\n/)) {
+    if (!raw.trim() || raw.trim().startsWith("#")) continue;
+    if (!/^\s/.test(raw)) {
+      current = { pattern: raw.trim(), headers: {} };
+      headerRules.push(current);
+    } else if (current) {
+      const index = raw.indexOf(":");
+      if (index > 0) current.headers[raw.slice(0, index).trim()] = raw.slice(index + 1).trim();
+    }
+  }
+} catch {
+  headerRules = [];
+}
+
+function withHeaders(pathname, headers) {
+  for (const rule of headerRules) {
+    const prefix = rule.pattern.replace(/\*+$/, "");
+    const matches = rule.pattern === "/*" || pathname === rule.pattern || (prefix && pathname.startsWith(prefix));
+    if (matches) Object.assign(headers, rule.headers);
+  }
+  return headers;
+}
+
 createServer(async (request, response) => {
   const url = new URL(request.url, "http://localhost");
   if (url.pathname.startsWith("/api/v1/")) {
@@ -88,7 +117,7 @@ createServer(async (request, response) => {
   for (const candidate of [join(ROOT, path), join(ROOT, `${path}.html`), join(ROOT, path, "index.html"), join(ROOT, `${path}.txt`)]) {
     const file = await existing(candidate);
     if (file) {
-      response.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream" });
+      response.writeHead(200, withHeaders(url.pathname, { "content-type": TYPES[extname(file)] ?? "application/octet-stream" }));
       response.end(await readFile(file));
       return;
     }
@@ -101,6 +130,6 @@ createServer(async (request, response) => {
     // Keep serving a simple 404 instead of crashing the whole test server.
     notFound = Buffer.from("<!doctype html><html lang=\"en\"><title>Not found</title><h1>404 — Not found</h1></html>");
   }
-  response.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+  response.writeHead(404, withHeaders(url.pathname, { "content-type": "text/html; charset=utf-8" }));
   response.end(notFound);
 }).listen(PORT, () => console.log(`Static export served at http://localhost:${PORT}`));
