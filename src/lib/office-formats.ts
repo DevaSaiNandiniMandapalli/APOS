@@ -245,6 +245,105 @@ export function readDocxBlocks(bytes: Uint8Array): DocBlock[] {
   return blocks;
 }
 
+/** A formatted run inside a Word paragraph. */
+export type DocRun = { text: string; bold?: boolean; italic?: boolean; size?: number; color?: string };
+
+export type RichDocBlock =
+  | {
+      kind: "text";
+      text: string;
+      runs: DocRun[];
+      align?: "left" | "center" | "right";
+      level?: 1 | 2 | 3;
+      bullet?: boolean;
+      spaceBefore?: number;
+    }
+  | { kind: "image"; bytes: Uint8Array; format: "png" | "jpeg"; width: number; height: number };
+
+function parseRunProperties(rPr: string): Omit<DocRun, "text"> {
+  const bold = /<w:b\b(?![^>]*w:val="(?:0|false)")/.test(rPr);
+  const italic = /<w:i\b(?![^>]*w:val="(?:0|false)")/.test(rPr);
+  const sizeMatch = /<w:sz w:val="(\d+)"/.exec(rPr);
+  const colorMatch = /<w:color w:val="([0-9A-Fa-f]{6})"/.exec(rPr);
+  return {
+    bold: bold || undefined,
+    italic: italic || undefined,
+    size: sizeMatch ? Number(sizeMatch[1]) / 2 : undefined,
+    color: colorMatch ? colorMatch[1].toUpperCase() : undefined,
+  };
+}
+
+function parseParagraphProperties(pPr: string) {
+  const style = /<w:pStyle w:val="([^"]+)"/.exec(pPr)?.[1] ?? "";
+  const levelMatch = /^heading\s*(\d)$/i.exec(style);
+  const level = levelMatch ? (Math.min(3, Math.max(1, Number(levelMatch[1]))) as 1 | 2 | 3) : undefined;
+  const jc = /<w:jc w:val="(left|center|right|both|start|end)"/.exec(pPr)?.[1];
+  const align: "left" | "center" | "right" | undefined =
+    jc === "center" ? "center" : jc === "right" || jc === "end" ? "right" : undefined;
+  const bullet = /<w:numPr>/.test(pPr);
+  const spacing = /<w:spacing[^>]*w:before="(\d+)"/.exec(pPr)?.[1];
+  return { level, align, bullet, spaceBefore: spacing ? Math.min(24, Number(spacing) / 20) : undefined };
+}
+
+/**
+ * Reads Word paragraphs with their run formatting (bold, italic, size, colour),
+ * alignment, heading level and bullet state, plus the pictures in document order.
+ */
+export function readDocxRichBlocks(bytes: Uint8Array): RichDocBlock[] {
+  const entries = unzipOffice(bytes);
+  const xml = entries?.["word/document.xml"];
+  if (!xml || !entries) throw new Error("This .docx file has no readable document body.");
+  const relationships = new Map<string, string>();
+  const rels = entries["word/_rels/document.xml.rels"];
+  if (rels) {
+    const relXml = new TextDecoder().decode(rels);
+    for (const match of relXml.matchAll(/<Relationship\b[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)) {
+      relationships.set(match[1], match[2].replace(/^\/?word\//, "").replace(/^\.\//, ""));
+    }
+  }
+
+  const blocks: RichDocBlock[] = [];
+  const raw = new TextDecoder().decode(xml);
+  for (const paragraph of raw.split(/<\/w:p>/)) {
+    const pPr = /<w:pPr>([\s\S]*?)<\/w:pPr>/.exec(paragraph)?.[1] ?? "";
+    const properties = parseParagraphProperties(pPr);
+
+    const runs: DocRun[] = [];
+    for (const runMatch of paragraph.matchAll(/<w:r\b[^>]*>([\s\S]*?)<\/w:r>/g)) {
+      const body = runMatch[1];
+      const rPr = /<w:rPr>([\s\S]*?)<\/w:rPr>/.exec(body)?.[1] ?? "";
+      const text = decodeXml(
+        body
+          .replace(/<w:tab\b[^>]*\/>/g, "\t")
+          .replace(/<w:br\b[^>]*\/>/g, "\n")
+          .replace(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g, "$1")
+          .replace(/<[^>]+>/g, ""),
+      );
+      if (!text) continue;
+      runs.push({ text, ...parseRunProperties(rPr) });
+    }
+
+    const text = runs.map((run) => run.text).join("").trim();
+    if (text) blocks.push({ kind: "text", text, runs, ...properties });
+
+    for (const blip of paragraph.matchAll(/<a:blip\b[^>]*r:embed="([^"]+)"/g)) {
+      const target = relationships.get(blip[1]);
+      if (!target) continue;
+      const media = entries[`word/${target}`] ?? entries[target];
+      if (!media?.byteLength) continue;
+      const format = identifyImageFormat(media);
+      if (format !== "png" && format !== "jpeg") continue;
+      try {
+        const size = readImageDimensions(media, format);
+        if (!size.width || !size.height) continue;
+        blocks.push({ kind: "image", bytes: media, format, width: size.width, height: size.height });
+      } catch { /* skip pictures with unreadable headers */ }
+    }
+  }
+  if (!blocks.length) throw new Error("This .docx file has no readable content.");
+  return blocks;
+}
+
 /** Builds a .docx with paragraphs and embedded PNG/JPEG pictures. */
 export function buildDocxRich(blocks: DocBlock[], title = "Converted document"): Uint8Array {
   let imageIndex = 0;
@@ -293,13 +392,20 @@ export type DocxRun = {
 };
 
 export type DocxContentBlock =
-  | { kind: "heading"; text: string; level: 1 | 2 | 3; alignment?: "left" | "center" | "right"; bold?: boolean; italic?: boolean; indent?: number; runs?: DocxRun[] }
+  | { kind: "heading"; text: string; level: 1 | 2 | 3; alignment?: "left" | "center" | "right"; bold?: boolean; italic?: boolean; indent?: number; runs?: DocxRun[]; ruleBelow?: boolean }
   | { kind: "paragraph"; text: string; alignment?: "left" | "center" | "right" | "justify"; fontSize?: number; color?: string; bold?: boolean; italic?: boolean; indent?: number; spaceBefore?: number; spaceAfter?: number; runs?: DocxRun[] }
-  | { kind: "list"; text: string; indent?: number; runs?: DocxRun[] }
-  | { kind: "table"; rows: string[][]; header?: boolean }
+  | { kind: "list"; text: string; indent?: number; runs?: DocxRun[]; ordered?: boolean }
+  | { kind: "table"; rows: string[][]; header?: boolean; bordered?: boolean }
   | { kind: "image"; bytes: Uint8Array; format: "png" | "jpeg"; width: number; height: number; maxWidth?: number; maxHeight?: number; alt?: string; anchor?: { x: number; y: number; width: number; height: number; pageWidth: number; pageHeight: number; behindText?: boolean } }
   | { kind: "pageBreak" }
   | { kind: "sectionBreak"; pageWidth: number; pageHeight: number };
+
+/** Splits a leading bullet or number marker off a list line. */
+export function splitListMarker(text: string): { text: string; ordered: boolean } {
+  const match = /^\s*([\u2022\u25AA\u25E6\u2023\u00B7\u25CF\u25CB]|[-*]|\d{1,3}[.)]|[a-zA-Z][.)])\s+/.exec(text);
+  if (!match) return { text: text.trim(), ordered: false };
+  return { text: text.slice(match[0].length).trim(), ordered: /\d|[a-zA-Z]/.test(match[1]) };
+}
 
 function docxParagraph(
   text: string,
@@ -314,15 +420,23 @@ function docxParagraph(
     spaceAfter?: number;
     styleId?: "Heading1" | "Heading2" | "Heading3";
     runs?: DocxRun[];
+    numbering?: 1 | 2;
+    ruleBelow?: boolean;
   } = {},
 ) {
   const alignment = options.alignment && options.alignment !== "left" ? `<w:jc w:val="${options.alignment}"/>` : "";
-  const indent = options.indent ? `<w:ind w:left="${Math.round(options.indent)}"/>` : "";
+  const indent = options.indent && !options.numbering ? `<w:ind w:left="${Math.round(options.indent)}"/>` : "";
+  const numbering = options.numbering ? `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${options.numbering}"/></w:numPr>` : "";
+  const border = options.ruleBelow
+    ? `<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="2" w:color="B9BCC8"/></w:pBdr>`
+    : "";
   const spacing = options.spaceBefore || options.spaceAfter
     ? `<w:spacing${options.spaceBefore ? ` w:before="${Math.round(options.spaceBefore)}"` : ""}${options.spaceAfter ? ` w:after="${Math.round(options.spaceAfter)}"` : ""}/>`
     : "";
   const style = options.styleId ? `<w:pStyle w:val="${options.styleId}"/>` : "";
-  const pPr = alignment || indent || spacing || style ? `<w:pPr>${style}${spacing}${alignment}${indent}</w:pPr>` : "";
+  const pPr = alignment || indent || spacing || style || numbering || border
+    ? `<w:pPr>${style}${numbering}${border}${spacing}${alignment}${indent}</w:pPr>`
+    : "";
   const runProperties = (run: DocxRun) => {
     const props = [
       run.bold ? "<w:b/>" : "",
@@ -350,23 +464,34 @@ function docxSectionProperties(pageWidth: number, pageHeight: number) {
   return `<w:sectPr><w:type w:val="nextPage"/><w:pgSz w:w="${width}" w:h="${height}"${width > height ? ' w:orient="landscape"' : ""}/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="360" w:footer="360" w:gutter="0"/></w:sectPr>`;
 }
 
-function docxTable(rows: string[][], header: boolean) {
+function docxTable(rows: string[][], header: boolean, bordered = false) {
   const cleanRows = rows
     .map((row) => row.map((cell) => String(cell ?? "")))
     .filter((row) => row.length > 0);
   if (!cleanRows.length) return "";
   const columns = Math.min(20, cleanRows.reduce((max, row) => Math.max(max, row.length), 1));
   const width = 9360;
-  const columnWidth = Math.max(480, Math.floor(width / columns));
-  const border = `<w:tblBorders><w:top w:val="single" w:sz="4" w:color="C8CBD8"/><w:left w:val="single" w:sz="4" w:color="C8CBD8"/><w:bottom w:val="single" w:sz="4" w:color="C8CBD8"/><w:right w:val="single" w:sz="4" w:color="C8CBD8"/><w:insideH w:val="single" w:sz="4" w:color="DDE0EA"/><w:insideV w:val="single" w:sz="4" w:color="DDE0EA"/></w:tblBorders>`;
-  const grid = `<w:tblGrid>${Array.from({ length: columns }, () => `<w:gridCol w:w="${columnWidth}"/>`).join("")}</w:tblGrid>`;
+  // Size columns by their longest cell so a date column stays narrow instead of
+  // taking half the page.
+  const weights = Array.from({ length: columns }, (_, index) => {
+    const longest = cleanRows.reduce((max, row) => Math.max(max, (row[index] ?? "").length), 1);
+    return Math.min(70, Math.max(4, longest));
+  });
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
+  const widths = weights.map((value) => Math.max(600, Math.round((value / totalWeight) * width)));
+  // A PDF table only has visible borders when the source drew them. Inventing
+  // a grid adds lines the original document never had.
+  const border = bordered
+    ? `<w:tblBorders><w:top w:val="single" w:sz="4" w:color="C8CBD8"/><w:left w:val="single" w:sz="4" w:color="C8CBD8"/><w:bottom w:val="single" w:sz="4" w:color="C8CBD8"/><w:right w:val="single" w:sz="4" w:color="C8CBD8"/><w:insideH w:val="single" w:sz="4" w:color="DDE0EA"/><w:insideV w:val="single" w:sz="4" w:color="DDE0EA"/></w:tblBorders>`
+    : `<w:tblBorders><w:top w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:left w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:bottom w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:right w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:insideH w:val="none" w:sz="0" w:space="0" w:color="auto"/><w:insideV w:val="none" w:sz="0" w:space="0" w:color="auto"/></w:tblBorders>`;
+  const grid = `<w:tblGrid>${widths.map((value) => `<w:gridCol w:w="${value}"/>`).join("")}</w:tblGrid>`;
   const body = cleanRows.map((row, rowIndex) => {
     const cells = Array.from({ length: columns }, (_, index) => {
       const value = row[index] ?? "";
       const paragraph = value
         ? docxParagraph(value, { size: 9, bold: header && rowIndex === 0 })
         : "<w:p/>";
-      return `<w:tc><w:tcPr><w:tcW w:w="${columnWidth}" w:type="dxa"/></w:tcPr>${paragraph}</w:tc>`;
+      return `<w:tc><w:tcPr><w:tcW w:w="${widths[index]}" w:type="dxa"/></w:tcPr>${paragraph}</w:tc>`;
     }).join("");
     return `<w:tr>${cells}</w:tr>`;
   }).join("");
@@ -387,13 +512,14 @@ export function buildDocxDocument(
   for (const block of blocks) {
     if (block.kind === "heading") {
       const size = block.level === 1 ? 20 : block.level === 2 ? 16 : 13;
-      content.push(docxParagraph(block.text, { size, bold: true, alignment: block.alignment, indent: block.indent, styleId: `Heading${block.level}` as "Heading1" | "Heading2" | "Heading3", runs: block.runs }));
+      content.push(docxParagraph(block.text, { size, bold: true, alignment: block.alignment, indent: block.indent, styleId: `Heading${block.level}` as "Heading1" | "Heading2" | "Heading3", runs: block.runs, ruleBelow: block.ruleBelow }));
     } else if (block.kind === "paragraph") {
       content.push(docxParagraph(block.text, { alignment: block.alignment, size: block.fontSize, color: block.color, bold: block.bold, italic: block.italic, indent: block.indent, spaceBefore: block.spaceBefore, spaceAfter: block.spaceAfter, runs: block.runs }));
     } else if (block.kind === "list") {
-      content.push(docxParagraph(block.text, { indent: block.indent ?? 360, runs: block.runs }));
+      const { text, ordered } = splitListMarker(block.text);
+      content.push(docxParagraph(text, { numbering: ordered || block.ordered ? 2 : 1, runs: block.runs }));
     } else if (block.kind === "table") {
-      content.push(docxTable(block.rows, block.header !== false));
+      content.push(docxTable(block.rows, block.header !== false, block.bordered === true));
       content.push("<w:p/>");
     } else if (block.kind === "pageBreak") {
       content.push('<w:p><w:r><w:br w:type="page"/></w:r></w:p>');
@@ -431,17 +557,19 @@ export function buildDocxDocument(
 
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>${content.join("")}${docxSectionProperties(pageSize.width, pageSize.height)}</w:body></w:document>`;
-  const documentRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="${REL_NS}">${rels.join("")}<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  const documentRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="${REL_NS}">${rels.join("")}<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rIdNumbering" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/></Relationships>`;
   const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Calibri" w:cs="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="320" w:after="160"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="40"/><w:szCs w:val="40"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="200" w:after="100"/><w:outlineLvl w:val="2"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/><w:szCs w:val="26"/></w:rPr></w:style></w:styles>`;
-  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>`;
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="jpeg" ContentType="image/jpeg"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>`;
   const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="${REL_NS}"><Relationship Id="rId1" Type="${OFFICE_DOC_REL}" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>`;
   const core = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>${xmlEscape(title)}</dc:title><dc:creator>APOS</dc:creator></cp:coreProperties>`;
+  const numbering = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="hybridMultilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="\u2022"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol" w:hint="default"/></w:rPr></w:lvl></w:abstractNum><w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="hybridMultilevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`;
   return zipSync({
     "[Content_Types].xml": strToU8(contentTypes),
     "_rels/.rels": strToU8(rootRels),
     "word/document.xml": strToU8(documentXml),
     "word/_rels/document.xml.rels": strToU8(documentRels),
     "word/styles.xml": strToU8(styles),
+    "word/numbering.xml": strToU8(numbering),
     "docProps/core.xml": strToU8(core),
     ...media,
   });

@@ -36,6 +36,7 @@ export type PdfTable = {
   y: number;
   width: number;
   height: number;
+  bordered?: boolean;
 };
 
 export type PdfTextBlock = {
@@ -48,6 +49,8 @@ export type PdfTextBlock = {
   bold?: boolean;
   italic?: boolean;
   indent?: number;
+  fontSize?: number;
+  ruleBelow?: boolean;
 };
 
 export type PdfPageBlock = PdfTextBlock | { kind: "table"; table: PdfTable; y: number };
@@ -300,12 +303,17 @@ export function detectTables(lines: readonly PdfLine[], pageWidth: number, pageH
 
 function headingFor(line: PdfLine, bodySize: number): 1 | 2 | 3 | null {
   const ratio = line.fontSize / Math.max(1, bodySize);
-  const short = line.text.length <= 140;
-  const upper = line.text.length > 2 && line.text === line.text.toUpperCase() && /[A-Z]/.test(line.text);
+  const text = line.text.trim();
+  const short = text.length <= 140;
+  const upper = text.length > 2 && text === text.toUpperCase() && /[A-Z]/.test(text);
   if (!short) return null;
   if (ratio >= 1.62) return 1;
   if (ratio >= 1.28) return 2;
-  if (ratio >= 1.16 || (line.bold && (upper || line.text.length <= 80))) return 3;
+  if (ratio >= 1.16) return 3;
+  // Section headings are often only slightly larger than body text (11pt vs
+  // 10pt in a typical resume) and bold detection is unreliable because it
+  // depends on optional PDF font metadata. A short ALL-CAPS line is a heading.
+  if (upper && ratio >= 1.02 && text.length <= 60) return 3;
   return null;
 }
 
@@ -320,16 +328,20 @@ function alignmentFor(line: PdfLine, pageWidth: number): "left" | "center" | "ri
   return "left";
 }
 
-export function buildTextBlocks(lines: readonly PdfLine[], pageWidth: number): { blocks: PdfTextBlock[]; bodySize: number } {
+export function buildTextBlocks(lines: readonly PdfLine[], pageWidth: number, rules: readonly number[] = []): { blocks: PdfTextBlock[]; bodySize: number } {
   const weighted: number[] = [];
   for (const line of lines) {
     for (let index = 0; index < Math.max(1, Math.min(80, textWidth(line.text))); index += 1) weighted.push(line.fontSize);
   }
   const bodySize = median(weighted) || median(lines.map((line) => line.fontSize)) || 12;
+  // The right edge of the text column, used to tell a wrapped line from the
+  // last line of a paragraph.
+  const contentRight = lines.reduce((widest, line) => Math.max(widest, line.x + line.width), 0);
   const blocks: PdfTextBlock[] = [];
   let current: PdfTextBlock | null = null;
   let lastLineY = 0;
   let lastLineSize = bodySize;
+  let lastLine: PdfLine | null = null;
 
   const flush = () => {
     if (current && current.text.trim()) blocks.push(current);
@@ -340,6 +352,9 @@ export function buildTextBlocks(lines: readonly PdfLine[], pageWidth: number): {
     const level = headingFor(line, bodySize);
     if (level) {
       flush();
+      // A horizontal rule drawn just under the heading is part of the design.
+      // PDF y grows upward, so "below" means a smaller y.
+      const ruleBelow = rules.some((ruleY) => ruleY < line.y && line.y - ruleY < Math.max(24, line.fontSize * 2.5));
       blocks.push({
         kind: "heading",
         text: line.text,
@@ -350,16 +365,44 @@ export function buildTextBlocks(lines: readonly PdfLine[], pageWidth: number): {
         bold: line.bold,
         italic: line.italic,
         indent: Math.max(0, line.x),
+        fontSize: line.fontSize,
+        ruleBelow,
       });
+      lastLine = line;
+      lastLineY = line.y;
+      lastLineSize = line.fontSize;
       continue;
     }
 
     const startsList = isListLine(line.text);
     const gap = current ? lastLineY - line.y : 0;
+    const gapLimit = Math.max(line.fontSize, lastLineSize);
+    // A line that starts further left than the block it would join is a new
+    // entry (a job title after an indented bullet, for example).
+    const outdented = current ? line.x < (current.indent ?? 0) - 2 : false;
+    // A wrapped line fills the column; the last line of a paragraph stops
+    // short. This is the most reliable paragraph signal when the PDF carries
+    // no bold or spacing metadata.
+    const previousEndedShort = lastLine
+      ? lastLine.x + lastLine.width < contentRight - Math.max(6, lastLine.fontSize * 4)
+      : false;
+    // A line closing with a bracket or colon is a label or entry, not prose.
+    const previousClosed = lastLine ? /[)\]:;]\s*$/.test(lastLine.text) && /^[A-Z0-9]/.test(line.text.trim()) : false;
     const breakParagraph = !current
-      || (startsList && current.kind !== "list")
-      || (startsList && current.kind === "list")
-      || gap > Math.max(line.fontSize, lastLineSize) * 1.85;
+      // Every bullet starts its own block.
+      || startsList
+      // A bullet list ends when a bold line or an outdented line follows.
+      || (current.kind === "list" && (Boolean(line.bold) || outdented))
+      // A bold line is a title, label or entry, never a continuation.
+      || (Boolean(line.bold) && !current.bold)
+      // Two consecutive bold lines are separate entries when the gap grows.
+      || (Boolean(line.bold) && Boolean(current.bold) && gap > gapLimit * 1.2)
+      // The previous line stopped short of the column, so it ended a block.
+      || previousEndedShort
+      // The previous line closed a label or entry.
+      || previousClosed
+      // A visibly larger gap separates paragraphs.
+      || gap > gapLimit * 1.5;
 
     if (breakParagraph) {
       flush();
@@ -372,7 +415,9 @@ export function buildTextBlocks(lines: readonly PdfLine[], pageWidth: number): {
         bold: line.bold,
         italic: line.italic,
         indent: Math.max(0, line.x),
+        fontSize: line.fontSize,
       };
+      lastLine = line;
       lastLineY = line.y;
       lastLineSize = line.fontSize;
       continue;
@@ -381,6 +426,7 @@ export function buildTextBlocks(lines: readonly PdfLine[], pageWidth: number): {
     if (current!.text.endsWith("-") && /^[a-z]/.test(line.text)) current!.text = `${current!.text.slice(0, -1)}${line.text}`;
     else current!.text = `${current!.text} ${line.text}`;
     current!.lines.push(line.text);
+    lastLine = line;
     lastLineY = line.y;
     lastLineSize = line.fontSize;
   }
@@ -393,14 +439,20 @@ export function buildPdfPageStructure(
   pageWidth: number,
   pageHeight: number,
   pageNumber = 1,
+  rules: readonly number[] = [],
+  verticalRules: readonly { x: number; y0: number; y1: number }[] = [],
 ): PdfPageStructure {
   const lines = groupTextLines(items);
   const { tables, tableLineIndexes } = detectTables(lines, pageWidth, pageHeight);
   const proseLines = lines.filter((_line, index) => !tableLineIndexes.has(index));
-  const { blocks: textBlocks } = buildTextBlocks(proseLines, pageWidth);
+  const { blocks: textBlocks } = buildTextBlocks(proseLines, pageWidth, rules);
   const blocks: PdfPageBlock[] = [
     ...textBlocks,
-    ...tables.map((table) => ({ kind: "table" as const, table, y: table.y })),
+    ...tables.map((table) => ({
+      kind: "table" as const,
+      table: { ...table, bordered: tableHasBorders(table, verticalRules) },
+      y: table.y,
+    })),
   ].sort((left, right) => right.y - left.y);
 
   const parts: string[] = [];
@@ -434,6 +486,187 @@ async function getPdfJs(): Promise<PdfJsModule> {
 
 export type PdfFontStyle = { bold: boolean; italic: boolean; family: string };
 
+/**
+ * pdf.js OPS codes for paths that are stroked: stroke, closeStroke, fillStroke,
+ * eoFillStroke, closeFillStroke, closeEOFillStroke. Filled-only paths are
+ * excluded because a white page background is a filled rectangle whose edges
+ * would otherwise look like table borders.
+ */
+const STROKED_PATH_OPS = new Set([20, 21, 24, 25, 26, 27]);
+
+/**
+ * Finds horizontal rules drawn on the page (the lines under section headings in
+ * most resumes and reports). Returns their y positions in display space, the
+ * same coordinate system as `PdfLine.y`.
+ */
+export function detectHorizontalRules(
+  pdfjs: PdfJsModule,
+  operatorList: { fnArray: readonly number[]; argsArray: readonly unknown[] },
+  viewport: { transform: number[]; width: number; height: number },
+): number[] {
+  const rules: number[] = [];
+  const { fnArray, argsArray } = operatorList;
+  if (!Array.isArray(fnArray) || !Array.isArray(argsArray)) return rules;
+  const minimumWidth = viewport.width * 0.4;
+  const [, b, , d, , f] = viewport.transform;
+  const toDisplayY = (x: number, y: number) => viewport.height - (b * x + d * y + f);
+  // pdf.js stores a path as [OPS op, [DrawOPS buffer], minMax]. The buffer is a
+  // flat run of [command, ...coordinates] using DrawOPS codes:
+  // 0 moveTo, 1 lineTo, 2 curveTo, 3 quadraticCurveTo, 4 closePath.
+  const MOVE_TO = 0;
+  const LINE_TO = 1;
+  const CURVE_TO = 2;
+  const QUADRATIC_TO = 3;
+  const CLOSE_PATH = 4;
+
+  for (let index = 0; index < fnArray.length; index += 1) {
+    if (fnArray[index] !== pdfjs.OPS.constructPath) continue;
+    const args = argsArray[index];
+    if (!Array.isArray(args)) continue;
+    // Only painted paths count. Clipping paths (endPath/clip) are invisible.
+    if (typeof args[0] === "number" && !STROKED_PATH_OPS.has(args[0])) continue;
+    const wrapper = args[1];
+    const data = Array.isArray(wrapper) ? wrapper[0] : wrapper;
+    if (!data || typeof (data as ArrayLike<number>).length !== "number") continue;
+    const path = data as ArrayLike<number>;
+
+    let cursor = 0;
+    let previous: { x: number; y: number } | null = null;
+    while (cursor < path.length) {
+      const command = path[cursor];
+      cursor += 1;
+      if (command === MOVE_TO) {
+        previous = { x: Number(path[cursor]), y: Number(path[cursor + 1]) };
+        cursor += 2;
+      } else if (command === LINE_TO) {
+        const point = { x: Number(path[cursor]), y: Number(path[cursor + 1]) };
+        cursor += 2;
+        if (previous && Math.abs(point.y - previous.y) < 0.75 && Math.abs(point.x - previous.x) >= minimumWidth) {
+          rules.push(toDisplayY(previous.x, previous.y));
+        }
+        previous = point;
+      } else if (command === CURVE_TO) {
+        cursor += 6;
+        previous = null;
+      } else if (command === QUADRATIC_TO) {
+        cursor += 4;
+        previous = null;
+      } else if (command === CLOSE_PATH) {
+        previous = null;
+      } else {
+        break;
+      }
+    }
+  }
+  // Page borders and background rectangles are not section rules.
+  const margin = viewport.height * 0.03;
+  const filtered = rules.filter((y) => y > margin && y < viewport.height - margin);
+  return [...new Set(filtered.map((y) => Math.round(y * 10) / 10))];
+}
+
+/**
+ * Collects vertical rules drawn on the page, in PDF user space. A bordered
+ * table (an exam timetable, an invoice) separates its columns with these.
+ * Clipping paths, filled-only paths and white strokes are ignored.
+ */
+export function detectVerticalRules(
+  pdfjs: PdfJsModule,
+  operatorList: { fnArray: readonly number[]; argsArray: readonly unknown[] },
+): { x: number; y0: number; y1: number }[] {
+  const { fnArray, argsArray } = operatorList;
+  if (!Array.isArray(fnArray) || !Array.isArray(argsArray)) return [];
+  const MOVE_TO = 0;
+  const LINE_TO = 1;
+  const CURVE_TO = 2;
+  const QUADRATIC_TO = 3;
+  const CLOSE_PATH = 4;
+  const found: { x: number; y0: number; y1: number }[] = [];
+  const colourStack: boolean[] = [];
+  let strokeIsWhite = false;
+
+  for (let index = 0; index < fnArray.length; index += 1) {
+    const op = fnArray[index];
+    const args = argsArray[index];
+    if (op === 10) {
+      colourStack.push(strokeIsWhite);
+      continue;
+    }
+    if (op === 11) {
+      strokeIsWhite = colourStack.pop() ?? false;
+      continue;
+    }
+    if (op === 56) {
+      strokeIsWhite = Number((args as unknown[])[0]) >= 0.95;
+      continue;
+    }
+    if (op === 58) {
+      strokeIsWhite = /^#f{6}$/i.test(String((args as unknown[])[0]));
+      continue;
+    }
+    if (op === 52) {
+      const components = (args as unknown[])[0];
+      strokeIsWhite = Array.isArray(components) && components.length > 0 && components.every((value) => Number(value) >= 0.95);
+      continue;
+    }
+    if (op !== pdfjs.OPS.constructPath) continue;
+    if (!Array.isArray(args)) continue;
+    if (typeof args[0] === "number" && !STROKED_PATH_OPS.has(args[0])) continue;
+    if (strokeIsWhite) continue;
+    const wrapper = args[1];
+    const data = Array.isArray(wrapper) ? wrapper[0] : wrapper;
+    if (!data || typeof (data as ArrayLike<number>).length !== "number") continue;
+    const path = data as ArrayLike<number>;
+
+    let cursor = 0;
+    let previous: { x: number; y: number } | null = null;
+    while (cursor < path.length) {
+      const command = path[cursor];
+      cursor += 1;
+      if (command === MOVE_TO) {
+        previous = { x: Number(path[cursor]), y: Number(path[cursor + 1]) };
+        cursor += 2;
+      } else if (command === LINE_TO) {
+        const point = { x: Number(path[cursor]), y: Number(path[cursor + 1]) };
+        cursor += 2;
+        if (previous && Math.abs(point.x - previous.x) < 0.75 && Math.abs(point.y - previous.y) > 20) {
+          found.push({ x: previous.x, y0: Math.min(previous.y, point.y), y1: Math.max(previous.y, point.y) });
+        }
+        previous = point;
+      } else if (command === CURVE_TO) {
+        cursor += 6;
+        previous = null;
+      } else if (command === QUADRATIC_TO) {
+        cursor += 4;
+        previous = null;
+      } else if (command === CLOSE_PATH) {
+        previous = null;
+      } else {
+        break;
+      }
+    }
+  }
+  return found;
+}
+
+/** A table is bordered when at least two vertical rules cross its own rows. */
+export function tableHasBorders(
+  table: { x: number; y: number; width: number; height: number },
+  verticalRules: readonly { x: number; y0: number; y1: number }[],
+): boolean {
+  const top = table.y;
+  const bottom = table.y - table.height;
+  const columns = new Set<number>();
+  for (const rule of verticalRules) {
+    const overlap = Math.min(rule.y1, top) - Math.max(rule.y0, bottom);
+    // A real column separator spans the table's rows, not just part of them.
+    if (overlap < table.height * 0.8) continue;
+    if (rule.x < table.x - 2 || rule.x > table.x + table.width + 2) continue;
+    columns.add(Math.round(rule.x));
+    if (columns.size >= 2) return true;
+  }
+  return false;
+}
+
 export function resolvePdfFontStyles(
   page: { commonObjs?: { get: (name: string) => unknown } },
   fontNames: Iterable<string>,
@@ -443,14 +676,27 @@ export function resolvePdfFontStyles(
     if (!fontName || styles.has(fontName)) continue;
     try {
       const font = page.commonObjs?.get(fontName) as
-        | { bold?: boolean; italic?: boolean; black?: boolean; loadedName?: string; fallbackName?: string; cssFontInfo?: { fontFamily?: string; fontWeight?: string | number } }
+        | {
+            bold?: boolean;
+            italic?: boolean;
+            black?: boolean;
+            name?: string;
+            loadedName?: string;
+            fallbackName?: string;
+            cssFontInfo?: { fontFamily?: string; fontWeight?: string | number };
+          }
         | undefined;
       if (!font) continue;
       const weight = String(font.cssFontInfo?.fontWeight ?? "");
+      // pdf.js only sets `bold` when the font descriptor says so, which many
+      // real-world PDFs omit. The PostScript name almost always carries it.
+      const names = `${font.name ?? ""} ${font.fallbackName ?? ""} ${font.loadedName ?? ""}`;
+      const nameBold = /(?:^|[^a-z])(?:bold|black|heavy|semibold|demibold)(?:[^a-z]|$)/i.test(names);
+      const nameItalic = /(?:^|[^a-z])(?:italic|oblique)(?:[^a-z]|$)/i.test(names);
       styles.set(fontName, {
-        bold: Boolean(font.bold || font.black || /^(?:[6-9]00|bold|bolder)$/i.test(weight)),
-        italic: Boolean(font.italic),
-        family: font.cssFontInfo?.fontFamily || font.loadedName || font.fallbackName || "",
+        bold: Boolean(font.bold || font.black || nameBold || /^(?:[6-9]00|bold|bolder)$/i.test(weight)),
+        italic: Boolean(font.italic || nameItalic),
+        family: font.cssFontInfo?.fontFamily || font.name || font.loadedName || font.fallbackName || "",
       });
     } catch {
       // Font metadata is optional. The name-based fallback still runs.
@@ -554,14 +800,19 @@ export async function extractPdfStructure(
         const viewport = page.getViewport({ scale: 1 });
         const content = await page.getTextContent();
         let fontStyles: Map<string, PdfFontStyle> | undefined;
+        let rules: number[] = [];
+        let verticalRules: { x: number; y0: number; y1: number }[] = [];
         try {
-          await page.getOperatorList();
+          const operatorList = await page.getOperatorList();
+          const list = operatorList as unknown as { fnArray: readonly number[]; argsArray: readonly unknown[] };
           fontStyles = resolvePdfFontStyles(page, Object.keys(content.styles));
+          rules = detectHorizontalRules(pdfjs, list, viewport);
+          verticalRules = detectVerticalRules(pdfjs, list);
         } catch {
           // Some damaged pages cannot provide an operator list; text still works.
         }
         const raw = normalisePageTextItems(pdfjs, content.items as unknown[], viewport, fontStyles);
-        const structure = buildPdfPageStructure(raw, viewport.width, viewport.height, pageNumber);
+        const structure = buildPdfPageStructure(raw, viewport.width, viewport.height, pageNumber, rules, verticalRules);
         pages.push(structure);
         if (structure.empty) emptyPages.push(pageNumber);
         characterCount += structure.text.length;

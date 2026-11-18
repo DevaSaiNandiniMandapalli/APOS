@@ -3,6 +3,7 @@ import {
   OFFICE_LIMITS,
   buildDocxDocument,
   buildXlsxWorkbook,
+  splitListMarker,
   validateDocxDocument,
   validateXlsxWorkbook,
   xmlEscape,
@@ -109,6 +110,7 @@ function textBlockToDocx(block: Exclude<PdfPageBlock, { kind: "table" }>): DocxC
       alignment: block.alignment,
       indent,
       bold: true,
+      ruleBelow: block.ruleBelow,
     };
   }
   if (block.kind === "list") {
@@ -121,6 +123,7 @@ function textBlockToDocx(block: Exclude<PdfPageBlock, { kind: "table" }>): DocxC
     indent,
     bold: block.bold,
     italic: block.italic,
+    fontSize: block.fontSize,
   };
 }
 
@@ -138,7 +141,7 @@ function positionedPageBlocks(
         positioned.push({
           y: block.y,
           order: order++,
-          block: { kind: "table", rows: block.table.rows, header: block.table.header },
+          block: { kind: "table", rows: block.table.rows, header: block.table.header, bordered: block.table.bordered },
         });
       } else {
         positioned.push({
@@ -268,7 +271,10 @@ function auditEditableDocx(
           if (value.trim().length >= 4) markers.push(value.trim().slice(0, 80));
         }
       } else if (block.text.trim().length >= 4) {
-        markers.push(block.text.trim().slice(0, 80));
+        // List markers are converted to real Word numbering, so the marker
+        // itself is no longer present in the generated XML.
+        const text = block.kind === "list" ? splitListMarker(block.text).text : block.text;
+        if (text.trim().length >= 4) markers.push(text.trim().slice(0, 80));
       }
     }
     const ocr = ocrTextByPage.get(page.page);
