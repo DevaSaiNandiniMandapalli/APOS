@@ -57,8 +57,8 @@ def run_watermark(files: list[UploadedFile], options: dict) -> ToolResult:
         key = (float(page.mediabox.width), float(page.mediabox.height))
         if key not in overlays:
             overlays[key] = _overlay(*key, draw)
-        page.merge_page(overlays[key])
         writer.add_page(page)
+        writer.pages[-1].merge_page(overlays[key])
     return ToolResult(f"{safe_stem(uploaded.name)}_watermarked.pdf", writer_bytes(writer))
 
 
@@ -88,8 +88,8 @@ def run_page_numbers(files: list[UploadedFile], options: dict) -> ToolResult:
             else:
                 canvas.drawString(36, y, label)
 
-        page.merge_page(_overlay(width, height, draw))
         writer.add_page(page)
+        writer.pages[-1].merge_page(_overlay(width, height, draw))
     return ToolResult(f"{safe_stem(uploaded.name)}_numbered.pdf", writer_bytes(writer))
 
 

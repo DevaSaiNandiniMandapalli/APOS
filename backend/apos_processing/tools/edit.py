@@ -74,8 +74,10 @@ def run_edit(files: list[UploadedFile], options: dict) -> ToolResult:
                 _draw_element(canvas, element, width, height, images)
             canvas.save()
             overlay = pypdf.PdfReader(io.BytesIO(buffer.getvalue())).pages[0]
-            page.merge_page(overlay)
-        writer.add_page(page)
+            writer.add_page(page)
+            writer.pages[-1].merge_page(overlay)
+        else:
+            writer.add_page(page)
     return ToolResult(f"{safe_stem(pdf_file.name)}_edited.pdf", writer_bytes(writer))
 
 
