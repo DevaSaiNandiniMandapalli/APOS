@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { checkPdfHeader } from "@/lib/pdf-limits";
 import { OCR_PDF_LIMITS, formatOcrPages, mergeOcrLines, parsePageSelection } from "@/lib/pdf-ocr";
+import { buildSearchablePdf, type OcrPageImage } from "@/lib/pdf-ocr-searchable";
 
 type Status = "idle" | "running" | "done" | "error";
 
@@ -11,13 +12,15 @@ export default function OcrPdf() {
   const [pageInput, setPageInput] = useState("");
   const [totalPages, setTotalPages] = useState(0);
   const [text, setText] = useState("");
+  const [pages, setPages] = useState<OcrPageImage[]>([]);
   const [progress, setProgress] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
+  const [pdfBusy, setPdfBusy] = useState(false);
   const cancelRef = useRef(false);
 
   const pick = async (selected: File | undefined) => {
-    setFile(null); setText(""); setTotalPages(0); setPageInput(""); setStatus("idle"); setMessage("");
+    setFile(null); setText(""); setPages([]); setTotalPages(0); setPageInput(""); setStatus("idle"); setMessage("");
     if (!selected) return;
     if (!selected.size) { setStatus("error"); setMessage("That file is empty."); return; }
     if (selected.size > OCR_PDF_LIMITS.maxFileBytes) { setStatus("error"); setMessage("Choose a PDF under 25 MB."); return; }
@@ -33,7 +36,7 @@ export default function OcrPdf() {
 
   const run = async () => {
     if (!file) return;
-    setStatus("running"); setText(""); setMessage(""); cancelRef.current = false;
+    setStatus("running"); setText(""); setPages([]); setMessage(""); cancelRef.current = false;
     let loadingTask: { destroy: () => Promise<void> } | null = null;
     try {
       setProgress("Opening the PDF…");
@@ -44,9 +47,9 @@ export default function OcrPdf() {
       const pdf = await (loadingTask as unknown as { promise: Promise<import("pdfjs-dist").PDFDocumentProxy> }).promise;
       setTotalPages(pdf.numPages);
 
-      let pages: number[];
+      let selected: number[];
       try {
-        pages = parsePageSelection(pageInput, pdf.numPages);
+        selected = parsePageSelection(pageInput, pdf.numPages);
       } catch (reason) {
         setStatus("error");
         setMessage(reason instanceof Error ? reason.message : "Choose valid pages.");
@@ -58,9 +61,10 @@ export default function OcrPdf() {
       const worker = await createWorker("eng");
       try {
         const results: { page: number; text: string }[] = [];
-        for (const [index, pageNumber] of pages.entries()) {
+        const recognisedPages: OcrPageImage[] = [];
+        for (const [index, pageNumber] of selected.entries()) {
           if (cancelRef.current) break;
-          setProgress(`Rendering page ${pageNumber} (${index + 1} of ${pages.length})…`);
+          setProgress(`Rendering page ${pageNumber} (${index + 1} of ${selected.length})…`);
           const page = await pdf.getPage(pageNumber);
           const viewport = page.getViewport({ scale: OCR_PDF_LIMITS.defaultScale });
           const canvas = document.createElement("canvas");
@@ -69,15 +73,33 @@ export default function OcrPdf() {
           const context = canvas.getContext("2d");
           if (!context) throw new Error("This browser could not provide a drawing canvas for page rendering.");
           await page.render({ canvas, canvasContext: context, viewport }).promise;
-          setProgress(`Recognising text on page ${pageNumber} (${index + 1} of ${pages.length})…`);
+          setProgress(`Recognising text on page ${pageNumber} (${index + 1} of ${selected.length})…`);
           const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+          const pixelWidth = canvas.width;
+          const pixelHeight = canvas.height;
           canvas.width = 0; canvas.height = 0; page.cleanup();
           if (!blob) throw new Error(`Page ${pageNumber} could not be rendered to an image.`);
-          const recognised = await worker.recognize(blob);
+          const recognised = await worker.recognize(blob, {}, { blocks: true });
           results.push({ page: pageNumber, text: mergeOcrLines(recognised.data.text) });
+          const words = (recognised.data.blocks ?? []).flatMap((block) =>
+            block.paragraphs.flatMap((paragraph) =>
+              paragraph.lines.flatMap((line) =>
+                line.words.map((word) => ({ text: word.text, x0: word.bbox.x0, y0: word.bbox.y0, x1: word.bbox.x1, y1: word.bbox.y1 })),
+              ),
+            ),
+          );
+          recognisedPages.push({
+            pageNumber,
+            png: new Uint8Array(await blob.arrayBuffer()),
+            pixelWidth,
+            pixelHeight,
+            pointWidth: viewport.width / OCR_PDF_LIMITS.defaultScale,
+            pointHeight: viewport.height / OCR_PDF_LIMITS.defaultScale,
+            words,
+          });
         }
-        const output = formatOcrPages(results);
-        setText(output);
+        setText(formatOcrPages(results));
+        setPages(recognisedPages);
         setStatus("done");
         setProgress(cancelRef.current ? "Cancelled — partial results are shown below." : `Finished ${results.length} page(s).`);
       } finally {
@@ -91,7 +113,7 @@ export default function OcrPdf() {
     }
   };
 
-  const download = () => {
+  const downloadText = () => {
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -99,6 +121,26 @@ export default function OcrPdf() {
     anchor.download = `${(file?.name ?? "document").replace(/\.pdf$/i, "")}-ocr.txt`;
     anchor.click();
     URL.revokeObjectURL(url);
+  };
+
+  const downloadSearchablePdf = async () => {
+    if (!file || !pages.length || pdfBusy) return;
+    setPdfBusy(true);
+    setMessage("");
+    try {
+      const source = new Uint8Array(await file.arrayBuffer());
+      const bytes = await buildSearchablePdf(source, pages);
+      const url = URL.createObjectURL(new Blob([bytes.slice() as unknown as BlobPart], { type: "application/pdf" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${(file.name).replace(/\.pdf$/i, "")}-searchable.pdf`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "The searchable PDF could not be created.");
+    } finally {
+      setPdfBusy(false);
+    }
   };
 
   const busy = status === "running";
@@ -141,10 +183,17 @@ export default function OcrPdf() {
           <label htmlFor="ocr-pdf-output">Recognised text</label>
           <textarea id="ocr-pdf-output" className="ocr__output" readOnly value={text} rows={12} />
           <div className="ocr__controls">
-            <button type="button" onClick={download}>Download .txt</button>
+            <button type="button" onClick={downloadText}>Download .txt</button>
+            <button type="button" onClick={() => void downloadSearchablePdf()} disabled={pdfBusy || !pages.length}>
+              {pdfBusy ? "Building…" : "Download searchable PDF"}
+            </button>
             <button type="button" onClick={() => { void navigator.clipboard.writeText(text).catch(() => undefined); }}>Copy text</button>
             <span className="ocr__message">{text.length.toLocaleString()} characters</span>
           </div>
+          <p className="route-note">
+            The searchable PDF keeps the scanned page picture and adds an invisible text layer, so the
+            document can be searched and copied. Pages you did not OCR stay as they were.
+          </p>
         </>
       )}
     </section>
