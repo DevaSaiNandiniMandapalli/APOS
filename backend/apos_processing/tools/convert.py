@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import os
 import shutil
 import subprocess
 import tempfile
@@ -130,10 +131,22 @@ def run_pdf_to_word(files: list[UploadedFile], options: dict) -> ToolResult:
 
 
 def soffice_path() -> str | None:
+    override = os.getenv("APOS_SOFFICE_PATH")
+    if override and Path(override).exists():
+        return override
     for candidate in ("soffice", "libreoffice"):
         found = shutil.which(candidate)
         if found:
             return found
+    windows_candidates = [
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "LibreOffice" / "program" / "soffice.exe",
+        Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "LibreOffice" / "program" / "soffice.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "LibreOfficePortable" / "Program" / "soffice.exe",
+        Path.home() / "LibreOfficePortable" / "Program" / "soffice.exe",
+    ]
+    for candidate in windows_candidates:
+        if candidate.exists():
+            return str(candidate)
     mac_app = Path("/Applications/LibreOffice.app/Contents/MacOS/soffice")
     return str(mac_app) if mac_app.exists() else None
 

@@ -14,4 +14,8 @@ Write-Host "Building with NEXT_PUBLIC_APOS_API_URL=$ApiUrl" -ForegroundColor Cya
 npm run build
 
 Write-Host ""
+Write-Host "Allowing the API origin in the Content-Security-Policy" -ForegroundColor Cyan
+node scripts/patch-headers.mjs
+
+Write-Host ""
 Write-Host "Next: npx wrangler deploy" -ForegroundColor Cyan
