@@ -58,7 +58,7 @@ test("every registry tool has a working route and honest status presentation", a
       await expect(page.locator('input[type="file"]')).toHaveCount(0);
     }
     if (tool.id === "edit-pdf") {
-      await expect(page.getByText("Available · text editing in the browser")).toBeVisible();
+      await expect(page.getByText("Available · annotations flattened on this device")).toBeVisible();
       await expect(page.getByRole("heading", { level: 2, name: "PDF Viewer" })).toBeVisible();
       await expect(page.locator('input[type="file"]')).toHaveCount(1);
     }
@@ -71,7 +71,7 @@ test("every registry tool has a working route and honest status presentation", a
 
 test("Edit PDF rejects a file whose content lacks a PDF signature", async ({ page }) => {
   await page.goto("/tools/edit-pdf");
-  await expect(page.getByText("Available · text editing in the browser")).toBeVisible();
+  await expect(page.getByText("Available · annotations flattened on this device")).toBeVisible();
   await page.getByLabel("Choose PDF").setInputFiles({
     name: "not-really.pdf",
     mimeType: "application/pdf",
@@ -1618,10 +1618,19 @@ test("PDF metadata inspection can be cancelled and terminates its worker", async
   await page.addInitScript(() => {
     const tracked = new WeakSet<Worker>(); const post = Worker.prototype.postMessage; const terminate = Worker.prototype.terminate;
     Object.defineProperty(window, "__metadataLifecycle", { value: { posted: false, terminated: false } });
-    Object.defineProperty(Worker.prototype, "postMessage", { value: function (...args: unknown[]) { const [message] = args; if (message && typeof message === "object" && (message as { action?: string }).action === "inspect") { tracked.add(this); (window as unknown as { __metadataLifecycle: { posted: boolean } }).__metadataLifecycle.posted = true; } return Reflect.apply(post, this, args); } });
+    Object.defineProperty(Worker.prototype, "postMessage", { value: function (...args: unknown[]) {
+      const [message] = args;
+      if (message && typeof message === "object" && (message as { action?: string }).action === "inspect") {
+        tracked.add(this);
+        (window as unknown as { __metadataLifecycle: { posted: boolean } }).__metadataLifecycle.posted = true;
+        // Hold the job so the cancel path is deterministic instead of racing a fast reply.
+        return;
+      }
+      return Reflect.apply(post, this, args);
+    } });
     Worker.prototype.terminate = function () { if (tracked.has(this)) (window as unknown as { __metadataLifecycle: { terminated: boolean } }).__metadataLifecycle.terminated = true; return terminate.call(this); };
   });
-  const pdf = await PDFDocument.create(); for (let index = 0; index < 450; index += 1) pdf.addPage([300, 400]);
+  const pdf = await PDFDocument.create(); pdf.addPage([300, 400]);
   await page.goto("/tools/pdf-metadata"); await page.getByLabel("Choose a PDF").setInputFiles({ name: "inspect-cancel.pdf", mimeType: "application/pdf", buffer: Buffer.from(await pdf.save()) });
   await page.getByRole("button", { name: "Inspect metadata" }).click();
   await page.waitForFunction(() => (window as unknown as { __metadataLifecycle: { posted: boolean } }).__metadataLifecycle.posted);
@@ -1724,7 +1733,7 @@ test("dashboard has no automated accessibility violations", async ({ page }) => 
 test("Edit PDF uploads, annotates, downloads a flattened copy and retains content", async ({ page }) => {
   await page.setViewportSize({ width: 1200, height: 900 });
   await page.goto("/tools/edit-pdf");
-  await expect(page.getByText("Available · text editing in the browser")).toBeVisible();
+  await expect(page.getByText("Available · annotations flattened on this device")).toBeVisible();
 
   const source = await PDFDocument.create();
   const font = await source.embedFont(StandardFonts.Helvetica);
