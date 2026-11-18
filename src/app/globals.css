@@ -152,6 +152,14 @@
 .workflow__hint { color: var(--muted); }
 .workflow__step-actions { display: flex; gap: 6px; }
 @media (max-width: 640px) { .workflow__steps li { grid-template-columns: 24px 1fr; } .workflow__hint { grid-column: 1 / -1; } .workflow__step-actions { grid-column: 1 / -1; } }
+.workflow__options { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 12px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.workflow__options label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--muted); }
+.workflow__options input, .workflow__options select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-soft); color: var(--text); font-size: 15px; min-width: 130px; }
+.workflow__options small { max-width: 220px; }
+.workflow__run { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+.workflow__reports { margin: 0; padding-left: 20px; font-size: 15px; color: var(--muted); }
+.workflow__reports li[data-status="failed"] { color: #9b2c20; }
+.merge-success ul { margin: 6px 0; padding-left: 20px; }
 
 /* Larger type can widen decorative hero art; clip it on small screens */
 @media (max-width: 760px) {

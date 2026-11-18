@@ -6,6 +6,7 @@ import {
   parseWorkflow,
   removeStep,
   serializeWorkflow,
+  updateStepOption,
   validateWorkflow,
 } from "./workflow";
 
@@ -51,5 +52,30 @@ describe("workflow model", () => {
   it("rejects unknown steps on import", () => {
     const result = parseWorkflow(JSON.stringify({ name: "x", steps: [{ type: "explode" }] }));
     expect("error" in result).toBe(true);
+  });
+
+  it("gives every step its default options", () => {
+    const wf = addStep(createWorkflow(), "rotate");
+    expect(wf.steps[0].options).toMatchObject({ angle: "90", pages: "" });
+  });
+
+  it("requires a value for required step options", () => {
+    let wf = createWorkflow();
+    wf = addStep(wf, "protect");
+    expect(validateWorkflow(wf).some((error) => error.includes("opening password"))).toBe(true);
+    wf = updateStepOption(wf, wf.steps[0].id, "password", "a-long-enough-password");
+    expect(validateWorkflow(wf)).toEqual([]);
+  });
+
+  it("keeps saved options on import and fills missing ones", () => {
+    const result = parseWorkflow(JSON.stringify({
+      name: "Saved",
+      steps: [{ type: "watermark", options: { text: "DRAFT" } }],
+    }));
+    expect("workflow" in result).toBe(true);
+    if ("workflow" in result) {
+      expect(result.workflow.steps[0].options.text).toBe("DRAFT");
+      expect(result.workflow.steps[0].options.opacity).toBe("0.25");
+    }
   });
 });
