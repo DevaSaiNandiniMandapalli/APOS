@@ -135,6 +135,28 @@ powershell -ExecutionPolicy Bypass -File scripts\build-with-server.ps1 -ApiUrl "
 npx wrangler deploy
 ```
 
+### C. Oracle Cloud Always Free (ARM Ampere A1)
+
+The best free host for this workload: 4 OCPU, 24 GB RAM and 200 GB disk, free indefinitely, with no cold starts. LibreOffice needs roughly 800 MB–1 GB during a conversion, which rules out every 256–512 MB free tier.
+
+1. Create an instance: shape **VM.Standard.A1.Flex** (4 OCPU / 24 GB), image **Ubuntu 24.04**, add your SSH key.
+2. SSH in and run the setup script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DevaSaiNandiniMandapalli/APOS/master/scripts/deploy-oracle.sh -o deploy.sh
+sudo DOMAIN=api.nxtgensec.org bash deploy.sh
+```
+
+It installs LibreOffice, Ghostscript, Tesseract, OCRmyPDF and the WeasyPrint libraries, creates a dedicated `apos` user, installs the API into a virtual environment, writes a hardened `systemd` unit, configures Caddy for automatic TLS, and opens ports 80/443.
+
+3. In the Oracle console, add ingress rules to the VCN security list for TCP 80 and 443 from `0.0.0.0/0`.
+4. Add an `A` record: `api.nxtgensec.org` → the instance's public IP.
+5. Verify: `curl https://api.nxtgensec.org/api/v1/health`.
+
+The unit runs as an unprivileged user with `ProtectSystem=strict`, `ProtectHome=read-only` and `PrivateTmp=true`. `HOME` points at `/var/lib/apos` because LibreOffice writes its profile there.
+
+**Alternative without open ports:** run `cloudflared tunnel run --token <token>` on the VM instead of Caddy. The named tunnel `apos-api` already targets `http://127.0.0.1:8000`, so the same CNAME works and nothing is exposed to the internet.
+
 ### Verifying whichever you choose
 
 ```powershell
