@@ -12,7 +12,7 @@ services:
     runtime: docker
     plan: free
     region: singapore
-    dockerfilePath: ./backend/Dockerfile
+    dockerfilePath: ./backend/Dockerfile.render
     dockerContext: ./backend
     healthCheckPath: /api/v1/health
     autoDeploy: true

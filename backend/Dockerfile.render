@@ -1,0 +1,44 @@
+# Lean image for Render's free tier (512 MB RAM).
+#
+# Installs only what the conversion tools need: LibreOffice for Office -> PDF and
+# Ghostscript for compression. OCRmyPDF, Tesseract and WeasyPrint are omitted, so
+# the `ocr` and `html_to_pdf` tools report themselves unavailable instead of
+# failing at call time.
+#
+# Use backend/Dockerfile for a full self-hosted deployment.
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        libreoffice-writer \
+        libreoffice-calc \
+        libreoffice-impress \
+        ghostscript \
+        fonts-dejavu-core \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY pyproject.toml ./
+COPY apos_api ./apos_api
+COPY apos_processing ./apos_processing
+
+RUN python -m pip install --upgrade pip \
+    && python -m pip install .
+
+RUN useradd --create-home --uid 10001 apos \
+    && chown -R apos:apos /app
+USER apos
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${PORT:-8000}/api/v1/health" || exit 1
+
+# Render injects PORT; fall back to 8000 locally.
+CMD ["sh", "-c", "uvicorn apos_api.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
