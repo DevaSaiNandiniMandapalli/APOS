@@ -54,6 +54,7 @@ async function chooseOfficePdf(page: import("@playwright/test").Page) {
 test("PDF to Office writes an editable Word document with headings, a real table and page boundaries", async ({ page }) => {
   await page.goto("/tools/pdf-to-office");
   await chooseOfficePdf(page);
+  await page.getByLabel("Word mode").selectOption("editable");
   await page.getByLabel("Output filename").fill("annual-report");
   await page.getByRole("button", { name: "Convert PDF" }).click();
   await expect(page.locator(".merge-success")).toBeVisible({ timeout: 30000 });
@@ -335,9 +336,9 @@ test("PDF to Office can use the layout-preserving server engine", async ({ page 
   });
   await page.goto("/tools/pdf-to-office");
   await chooseOfficePdf(page);
-  await expect(page.getByLabel("Word engine").getByRole("option", { name: /Layout-preserving server/ })).toBeAttached();
+  await expect(page.getByLabel("Word engine").getByRole("option", { name: /Exact page layout server/ })).toBeAttached();
   await page.getByLabel("Word engine").selectOption("server");
-  await expect(page.getByText(/Layout-preserving mode uploads this PDF/i)).toBeVisible();
+  await expect(page.getByText(/Server exact layout uploads this PDF/i)).toBeVisible();
   await page.getByRole("button", { name: "Convert PDF" }).click();
   await expect(page.locator(".merge-success")).toBeVisible({ timeout: 30000 });
   const { bytes, name } = await downloadBytes(page, "Download annual.docx");
@@ -356,7 +357,7 @@ test("real FastAPI layout engine converts PDF to Word through the main UI", asyn
   });
   await page.goto("/tools/pdf-to-office");
   await chooseOfficePdf(page);
-  await expect(page.getByLabel("Word engine").getByRole("option", { name: /Layout-preserving server/ })).toBeAttached({ timeout: 20000 });
+  await expect(page.getByLabel("Word engine").getByRole("option", { name: /Exact page layout server/ })).toBeAttached({ timeout: 20000 });
   await page.getByLabel("Word engine").selectOption("server");
   await page.getByRole("button", { name: "Convert PDF" }).click();
   await expect(page.locator(".merge-success")).toBeVisible({ timeout: 60000 });
@@ -366,20 +367,25 @@ test("real FastAPI layout engine converts PDF to Word through the main UI", asyn
   expect(xml).toContain("Revenue");
 });
 
-test("Editable Word anchors pictures at their original PDF coordinates", async ({ page }) => {
+test("Exact positions keeps text lines and pictures at their original PDF coordinates", async ({ page }) => {
   await page.goto("/tools/pdf-to-office");
   await page.getByLabel("Choose a file").setInputFiles({ name: "picture-layout.pdf", mimeType: "application/pdf", buffer: await pdfWithPicture() });
   await expect(page.getByRole("heading", { name: "Document preview" })).toBeVisible({ timeout: 20000 });
+  await expect(page.getByLabel("Word mode")).toHaveValue("positions");
   await page.getByRole("button", { name: "Convert PDF" }).click();
   await expect(page.locator(".merge-success")).toBeVisible({ timeout: 30000 });
   const { bytes } = await downloadBytes(page, "Download picture-layout.docx");
   const entries = unzipSync(bytes);
   const xml = new TextDecoder().decode(entries["word/document.xml"]);
+  expect(xml).toContain("<w:framePr");
+  expect(xml).toContain('w:pgSz w:w="10000" w:h="14000"');
   expect(xml).toContain("<wp:anchor");
   expect(xml).toContain('behindDoc="1"');
   expect(xml).toContain("<wp:positionH");
   expect(xml).toContain("<wp:positionV");
   expect(xml).toContain("Text before the picture.");
   expect(xml).toContain("Text after the picture.");
+  expect(xml).toContain("<wp:posOffset>1270000</wp:posOffset>");
+  expect(xml).toContain("<wp:posOffset>2286000</wp:posOffset>");
   expect(Object.keys(entries).some((name) => name.startsWith("word/media/"))).toBe(true);
 });

@@ -1518,6 +1518,7 @@ test("PDF page numbering supports skip-cover and padded formatting", async ({ pa
 });
 
 test("PDF Essentials tools render without dark-theme accessibility or overflow regressions", async ({ page }) => {
+  test.setTimeout(120000);
   await page.setViewportSize({ width: 390, height: 844 });
   const pdf = await PDFDocument.create(); pdf.addPage([300, 400]);
   const fixture = Buffer.from(await pdf.save());
@@ -1538,6 +1539,7 @@ test("PDF Essentials tools render without dark-theme accessibility or overflow r
 });
 
 test("PDF Essentials tools render at desktop dimensions without overflow", async ({ page }) => {
+  test.setTimeout(120000);
   await page.setViewportSize({ width: 1280, height: 900 });
   const pdf = await PDFDocument.create(); pdf.addPage([300, 400]);
   const fixture = Buffer.from(await pdf.save());

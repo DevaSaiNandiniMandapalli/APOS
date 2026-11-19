@@ -32,7 +32,7 @@ function formatBytes(bytes: number) {
 export default function PdfToOffice() {
   const [file, setFile] = useState<File | null>(null);
   const [format, setFormat] = useState<PdfOfficeFormat>("docx");
-  const [mode, setMode] = useState<PdfOfficeMode>("editable");
+  const [mode, setMode] = useState<PdfOfficeMode>("positions");
   const [engine, setEngine] = useState<"browser" | "server">("browser");
   const [serverTool, setServerTool] = useState<ServerTool | null>(null);
   const [serverOcrAvailable, setServerOcrAvailable] = useState(false);
@@ -165,7 +165,7 @@ export default function PdfToOffice() {
     abortRef.current = controller;
     try {
       const pages = pageMode === "custom" ? pageRange : "";
-      if (format === "docx" && mode === "editable" && engine === "server") {
+      if (format === "docx" && (mode === "editable" || mode === "positions") && engine === "server") {
         if (!serverTool) throw new Error("The layout-preserving Word engine is not available on the configured server.");
         if (serverOcr && !serverOcrAvailable) throw new Error("OCR is not available on this processing server. Install OCRmyPDF and Tesseract, or turn OCR off.");
         setProgress("Uploading to your APOS processing server…");
@@ -173,7 +173,7 @@ export default function PdfToOffice() {
           pages,
           ocr: serverOcr,
           language: serverLanguage,
-          mode: serverMode,
+          mode: mode === "positions" ? "layout" : serverMode,
         }, controller.signal);
         if (controller.signal.aborted || !mountedRef.current) return;
         const blobUrl = URL.createObjectURL(output.blob);
@@ -183,7 +183,7 @@ export default function PdfToOffice() {
           bytes: new Uint8Array(0),
           fileName,
           mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          detail: serverMode === "layout"
+          detail: mode === "positions" || serverMode === "layout"
             ? `Exact-layout Word document generated on your APOS processing server${serverOcr ? " with OCR" : ""}. Text stays editable and pictures keep their source page positions.`
             : `Flowing Word document generated on your APOS processing server${serverOcr ? " with OCR" : ""}. Text reflows normally; complex layouts may need review.`,
           stats: {
@@ -200,10 +200,9 @@ export default function PdfToOffice() {
             unplacedImages: 0,
             warnings: [
               "This document was processed on the self-hosted APOS server, not in this browser.",
-              serverMode === "layout"
+              mode === "positions" || serverMode === "layout"
                 ? "Exact layout keeps text and pictures at their PDF positions. Text is editable line by line; editing one line does not reflow the rest. Charts, rules and other vector artwork are preserved as a background layer."
-                : "Flowing Word rebuilds normal paragraphs and tables. Pictures and complex layouts may move during reflow.",
-            ],
+                : "Flowing Word rebuilds normal paragraphs and tables. Pictures and complex layouts may move during reflow.",            ],
           },
           url: blobUrl,
         });
@@ -265,6 +264,7 @@ export default function PdfToOffice() {
     setServerOcr(false);
     setServerMode("layout");
     setEngine("browser");
+    setMode("positions");
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -314,9 +314,9 @@ export default function PdfToOffice() {
 
   return <section className="office-convert" aria-labelledby="pdf-office-heading">
     <h2 id="pdf-office-heading">Convert a PDF to editable Word or Excel</h2>
-    <p>Editable Word rebuilds selectable text and tables. For the closest match to the source PDF, choose the optional exact-layout server engine: text stays editable and pictures keep their original page positions. Picture pages embeds each PDF page as a picture when you do not need editing.</p>
-    <div className="privacy-note">{format === "docx" && mode === "editable" && engine === "server"
-      ? "Server layout mode uploads this PDF to the configured APOS processing server. That server handles the file in memory or a temporary directory, uses no database, and does not keep it permanently. Browser-local mode remains available and never uploads."
+    <p>Exact positions keeps every text line and picture at its PDF coordinates, in the browser or on the optional server. Reflowing Word rebuilds headings, paragraphs and tables for easier editing. Picture pages embeds each PDF page as a picture when you do not need editing.</p>
+    <div className="privacy-note">{format === "docx" && (mode === "editable" || mode === "positions") && engine === "server"
+      ? "Server exact layout uploads this PDF to the configured APOS processing server. That server handles the file in memory or a temporary directory, uses no database, and does not keep it permanently. Browser-local mode remains available and never uploads."
       : "The PDF is read in this browser. Nothing is uploaded. The converter accepts PDFs up to 25 MB and 500 pages. Image-only pages are detected individually: enable OCR to convert them to editable text, or use Visual Word for an image-based copy."}</div>
 
     <label className="file-picker">Choose a file
@@ -374,18 +374,20 @@ export default function PdfToOffice() {
         </label>
         {format === "docx" && <label>Word mode
           <select value={mode} disabled={busy} onChange={(event) => setMode(event.target.value as PdfOfficeMode)}>
-            <option value="editable">Editable Word - reflowing text, pictures anchored in place</option>
+            <option value="positions">Exact positions - text and pictures stay in place (browser)</option>
+            <option value="editable">Reflowing Word - headings, paragraphs and tables</option>
             <option value="visual">Picture pages - every page as a picture (not editable)</option>
           </select>
         </label>}
-        {format === "docx" && mode === "editable" && <p className="route-note">Browser-local Editable Word reflows text into normal paragraphs and anchors pictures at their original page coordinates. For text and pictures that both keep their PDF positions, select the exact-layout server engine below.</p>}
-        {format === "docx" && mode === "editable" && <label>Word engine
+        {format === "docx" && mode === "positions" && <p className="route-note">Browser-local exact positions places every text line and picture at its PDF coordinates and keeps source page sizes. Scanned pages stay as page pictures. Charts, rules and other vector artwork need the server exact-layout engine.</p>}
+        {format === "docx" && mode === "editable" && <p className="route-note">Reflowing Word rebuilds headings, paragraphs and tables for easier editing. Pictures are anchored, but text reflows. For exact page positions, choose Exact positions.</p>}
+        {format === "docx" && mode !== "visual" && <label>Word engine
           <select aria-label="Word engine" value={engine} disabled={busy} onChange={(event) => setEngine(event.target.value as "browser" | "server")}>
-            <option value="browser">Browser-local - private, reflowing document</option>
-            {serverTool && <option value="server">Exact page layout server - text and pictures stay in place</option>}
+            <option value="browser">Browser-local - private, no upload</option>
+            {serverTool && <option value="server">Exact page layout server - keeps vector artwork too</option>}
           </select>
           {!serverChecked && <span className="route-note">Checking the optional processing server…</span>}
-          {serverChecked && !serverTool && <span className="route-note">The layout-preserving engine is not configured or unavailable. <Link className="text-link" href="/server-tools">Check server tools</Link>.</span>}
+          {serverChecked && !serverTool && <span className="route-note">The exact-layout server engine is not configured or unavailable. <Link className="text-link" href="/server-tools">Check server tools</Link>.</span>}
         </label>}
         <label>Pages
           <select aria-label="Pages" value={pageMode} disabled={busy} onChange={(event) => setPageMode(event.target.value as "all" | "custom")}>
@@ -398,16 +400,20 @@ export default function PdfToOffice() {
           <span id="office-range-help" className="route-note">Use page numbers or ranges, such as 1-3, 5.</span>
         </label>}
         {pageSelectionError && <p className="merge-error" role="alert">{pageSelectionError}</p>}
+        {format === "docx" && mode === "positions" && engine === "browser" && <>
+          <label className="office-check"><input type="checkbox" checked={includePictures} disabled={busy} onChange={(event) => setIncludePictures(event.target.checked)} /> Include pictures at their source positions</label>
+          <p className="route-note">Scanned or full-page-image pages are kept as page pictures and are not editable. No OCR is needed for this mode.</p>
+        </>}
         {format === "docx" && mode === "editable" && engine === "browser" && <>
           <label className="office-check"><input type="checkbox" checked={includeTables} disabled={busy} onChange={(event) => setIncludeTables(event.target.checked)} /> Keep detected tables as Word tables</label>
           <label className="office-check"><input type="checkbox" checked={includePictures} disabled={busy} onChange={(event) => setIncludePictures(event.target.checked)} /> Include content pictures (never full-page scans or backgrounds)</label>
           <label className="office-check"><input type="checkbox" checked={pageBreaks} disabled={busy} onChange={(event) => setPageBreaks(event.target.checked)} /> Keep PDF page boundaries and source page sizes</label>
           <label className="office-check"><input type="checkbox" checked={ocrScannedPages} disabled={busy} onChange={(event) => setOcrScannedPages(event.target.checked)} /> OCR image-only pages (English, slower; first use downloads the model)</label>
-          <p className="route-note">If image-only pages are found and OCR is off, conversion stops with the affected page numbers. It never inserts screenshots into Editable Word.</p>
+          <p className="route-note">If image-only pages are found and OCR is off, conversion stops with the affected page numbers. It never inserts screenshots into Reflowing Word.</p>
         </>}
-        {format === "docx" && mode === "editable" && engine === "server" && <>
+        {format === "docx" && (mode === "positions" || mode === "editable") && engine === "server" && <>
           <label className="office-check"><input type="checkbox" checked={serverOcr} disabled={busy || !serverOcrAvailable} onChange={(event) => setServerOcr(event.target.checked)} /> OCR scanned pages on the server</label>
-          {!serverOcrAvailable && <p className="route-note">Server OCR needs OCRmyPDF and Tesseract. Text PDFs can still use layout conversion.</p>}
+          {!serverOcrAvailable && <p className="route-note">Server OCR needs OCRmyPDF and Tesseract. Text PDFs can still use exact layout.</p>}
           {serverOcr && <label>OCR language
             <select value={serverLanguage} disabled={busy} onChange={(event) => setServerLanguage(event.target.value)}>
               <option value="eng">English</option>
@@ -417,13 +423,13 @@ export default function PdfToOffice() {
               <option value="spa">Spanish</option>
             </select>
           </label>}
-          <label>Server layout
+          {mode === "editable" && <label>Server layout
             <select aria-label="Server layout" value={serverMode} disabled={busy} onChange={(event) => setServerMode(event.target.value as "layout" | "flow")}>
               <option value="layout">Exact page layout - text and pictures keep their PDF positions</option>
               <option value="flow">Flowing document - normal reflowing paragraphs and tables</option>
             </select>
-          </label>
-          <p className="route-note">{serverMode === "layout"
+          </label>}
+          <p className="route-note">{mode === "positions" || serverMode === "layout"
             ? "Each page keeps its source size. Text lines are placed at their PDF baselines, pictures at their source boxes, and charts, rules and logos are kept as a background layer. Text stays editable, but editing one line does not reflow the rest."
             : "The server rebuilds flowing paragraphs and tables. This is easier to edit, but pictures and complex layouts may move during reflow."}</p>
         </>}
@@ -450,7 +456,9 @@ export default function PdfToOffice() {
     {result && <div role="status" className="merge-success office-result">
       <p>{result.detail}</p>
       {result.stats.warnings.map((warning) => <p className="office-convert__warning" key={warning}>{warning}</p>)}
-      {result.stats.ocrPages > 0 && <p className="route-note">OCR text is editable but may contain recognition errors. Review it before publishing.</p>}
+      {result.stats.ocrPages > 0 && <p className="route-note">{mode === "positions" || serverMode === "layout"
+        ? "OCR was applied, but exact layout keeps scanned pages as page pictures. Choose Flowing document if you need editable OCR text."
+        : "OCR text is editable but may contain recognition errors. Review it before publishing."}</p>}
       <a className="hero-cta" href={result.url} download={result.fileName}>Download {result.fileName}</a>
       <button type="button" onClick={reset}>Convert another PDF</button>
     </div>}

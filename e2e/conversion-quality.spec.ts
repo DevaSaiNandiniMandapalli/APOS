@@ -50,6 +50,7 @@ async function pdfToWord(page: import("@playwright/test").Page, source: Buffer) 
   await page.goto("/tools/pdf-to-office");
   await page.getByLabel("Choose a file").setInputFiles({ name: "report.pdf", mimeType: "application/pdf", buffer: source });
   await expect(page.getByRole("heading", { name: "Document preview" })).toBeVisible({ timeout: 60000 });
+  await page.getByLabel("Word mode").selectOption("editable");
   await page.getByRole("button", { name: "Convert PDF" }).click();
   await expect(page.getByRole("link", { name: /Download .*\.docx$/ })).toBeVisible({ timeout: 120000 });
   const pending = page.waitForEvent("download");

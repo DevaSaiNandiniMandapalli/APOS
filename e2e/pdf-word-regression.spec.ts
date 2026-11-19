@@ -61,7 +61,7 @@ async function convertOffice(page: import("@playwright/test").Page, pdf: Buffer,
   await page.goto("/tools/pdf-to-office");
   await page.getByLabel("Choose a file").setInputFiles({ name: "regression.pdf", mimeType: "application/pdf", buffer: pdf });
   await expect(page.getByRole("heading", { name: "Document preview" })).toBeVisible({ timeout: 30000 });
-  if (mode === "visual") await page.getByLabel("Word mode").selectOption("visual");
+  await page.getByLabel("Word mode").selectOption(mode);
   await page.getByRole("button", { name: "Convert PDF" }).click();
   await expect(page.locator(".merge-success, .merge-error").first()).toBeVisible({ timeout: 120000 });
   return page;

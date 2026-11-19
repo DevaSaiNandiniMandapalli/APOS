@@ -49,6 +49,20 @@ describe("structured Word export", () => {
     expect(xml).toContain("<wp:positionV");
   });
 
+  it("writes positioned text frames with page-relative coordinates", () => {
+    const bytes = buildDocxDocument([
+      { kind: "positionedText", text: "Exact line", x: 50, top: 100, width: 200, fontSize: 12, bold: true, italic: true, font: "Times New Roman" },
+    ], "Positioned");
+    const { xml } = validateDocxDocument(bytes);
+    expect(xml).toContain("<w:framePr");
+    expect(xml).toContain('w:x="1000"');
+    expect(xml).toContain('w:y="2000"');
+    expect(xml).toContain('w:hAnchor="page"');
+    expect(xml).toContain('w:vAnchor="page"');
+    expect(xml).toContain('w:ascii="Times New Roman"');
+    expect(xml).toContain("Exact line");
+  });
+
   it("rejects a package whose image relationship points to a missing part", () => {
     const bytes = buildDocxDocument([{ kind: "image", bytes: PNG_1PX, format: "png", width: 10, height: 10 }]);
     const entries = unzipSync(bytes);

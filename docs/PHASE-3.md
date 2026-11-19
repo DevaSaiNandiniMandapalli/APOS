@@ -8,7 +8,7 @@ The authoritative registry in `src/lib/registry.ts` marks these tools **Availabl
 
 | Tool | Implementation |
 | --- | --- |
-| PDF to Office | Structured text, heading, paragraph and table extraction; real DOCX and XLSX packages; editable Word with content pictures and source page sizes; separate visual page-picture mode; per-page image-only detection and optional OCR; page ranges; previews; output validation |
+| PDF to Office | Structured text, heading, paragraph and table extraction; real DOCX and XLSX packages; browser exact-position Word with text frames and anchored pictures; browser reflowing Word; separate visual page-picture mode; optional server exact layout with vector artwork; per-page image-only detection and optional OCR; page ranges; previews; output validation |
 | PDF to Images | All/selected/ranged pages; PNG/JPG; 72, 108, 144, 150, 200 and 300 DPI; JPEG quality; background colour; page thumbnails; individual and ZIP downloads |
 | PDF to Text | UTF-8 extraction; page ranges; page headings; batch conversion; text preview; copy; empty-page and scanned-page reporting; ZIP and error report |
 | PDF to HTML | Safe semantic reading mode and approximate layout mode; headings, paragraphs, tables and pictures; page labels; standalone HTML and complete ZIP package |
@@ -114,12 +114,15 @@ npx wrangler deploy --dry-run
 
 Results from the PDF-to-Word fix verification:
 
-- `npm.cmd test` - 331 tests passed across 46 files.
+- `npm.cmd test` - 352 tests passed across 48 files.
 - `npm.cmd run typecheck` - passed.
 - `npm.cmd run lint` - 0 errors, 0 warnings.
 - `npm.cmd run build` - passed; 65 static routes generated, including `/server-tools`.
-- Focused PDF/Office Playwright run - 29 passed.
-- Full Playwright suite `npx playwright test --workers=2` - 173 passed, 2 skipped (the real FastAPI integration tests require `APOS_LIVE_BACKEND=1`). The skipped tests passed separately against the live local backend.
+- Focused PDF/Office Playwright run - 14 passed, 1 skipped (the real FastAPI test requires `APOS_LIVE_BACKEND=1`; it passed separately against the live local backend).
+- Conversion-quality and PDF/Word regression Playwright runs - 12 passed.
+- PDF Essentials accessibility/overflow runs - 2 passed.
+- Security-header runs - 2 passed.
+- A full-suite rerun after the exact-position default change could not complete because the local static server process exited under load; the affected specs above passed individually. The earlier full run before this change was 173 passed, 2 skipped.
 - `backend/.venv/Scripts/python.exe -m pytest backend/tests -q` - 20 passed, including on pypdf 7.0.1.
 - `npx wrangler deploy --dry-run` - passed; the Worker and static assets bundle without errors.
 
@@ -127,7 +130,7 @@ The regression fixture was downloaded through the real PDF-to-Office UI and reop
 
 ## Known limitations and honest status
 
-The tools are useful for real conversion, but they are not a replacement for a full desktop layout engine. PDF text extraction cannot reconstruct glyph-perfect typography, complex columns, rotated text, form fields, annotations or every embedded picture. Visual Word is a page-image mode and is not editable; Editable Word never falls back to page screenshots. HTML layout mode approximates positions with CSS and remains responsive, so it may reflow. Scanned documents remain OCR-dependent and are reported page by page.
+The tools are useful for real conversion, but they are not a replacement for a full desktop layout engine. PDF text extraction cannot reconstruct glyph-perfect typography, complex columns, rotated text, form fields, annotations or every embedded picture. Picture pages is entirely page pictures and is not editable; Exact positions keeps scanned pages as page pictures and does not reproduce browser-side vector artwork; the server exact-layout engine preserves that artwork but still does not reconstruct forms, hyperlinks or annotations. Reflowing Word never falls back to page screenshots. HTML layout mode approximates positions with CSS and remains responsive, so it may reflow. Scanned documents remain OCR-dependent for editable text and are reported page by page.
 
 The browser-local PDF Conversion Studio introduced no database, account system, server-side document retention or automatic upload path. The static-export and Cloudflare Worker architecture is unchanged for browser tools.
 
@@ -135,14 +138,18 @@ The browser-local PDF Conversion Studio introduced no database, account system, 
 
 A separate, optional FastAPI service now lives under `backend/`. It vendors the MIT-licensed APOS/pdfsmith processing code supplied for this project and exposes advanced native engines (LibreOffice, Ghostscript, pyHanko, OCRmyPDF, WeasyPrint, pdf2docx and pdfplumber) at `/api/v1/tools`. The current branded frontend consumes it through the clearly labelled `/server-tools` page. Browser-local registry tools remain browser-local and unchanged. See `docs/SELF-HOSTING-SERVER-TOOLS.md` for setup, deployment, limits and the privacy distinction.
 
-### Layout-preserving Word engine
+### Layout-preserving Word engines
 
-The main PDF to Office tool has two Word engines:
+The main PDF to Office tool has three Word modes:
 
-- **Browser-local editable Word** — default, no upload, structured reconstruction with OCR support.
-- **Exact page layout server Word** — only appears when the configured APOS server reports `pdf_to_word` available. It supports page ranges, optional OCR (OCRmyPDF/Tesseract), and two server layouts:
-  - **Exact page layout** — every page keeps its source size; each text line is written as a Word frame at its PDF baseline, pictures are anchored at their source bounding boxes, and remaining vector artwork (charts, rules, logos, highlights) is kept as a transparent background layer. Text stays editable line by line.
-  - **Flowing document** — reflows paragraphs and tables with `pdf2docx` for easier editing.
+- **Exact positions (browser, default)** — no upload. Every text line becomes a Word frame at its PDF baseline, every picture is anchored at its source bounding box, and source page sizes are preserved. Scanned or full-page-image pages are kept as page pictures. Charts, rules and other vector artwork are not reproduced in this browser mode.
+- **Reflowing Word (browser)** — no upload. Rebuilds headings, paragraphs and tables for easier editing; pictures are anchored, but text reflows. Supports OCR for image-only pages.
+- **Picture pages** — embeds each PDF page as a picture and is not editable.
+
+The optional **exact page layout server** engine appears when the configured APOS server reports `pdf_to_word` available. It supports page ranges, optional OCR (OCRmyPDF/Tesseract), and two server layouts:
+
+- **Exact page layout** — every page keeps its source size; each text line is written as a Word frame at its PDF baseline, pictures are anchored at their source bounding boxes, and remaining vector artwork (charts, rules, logos, highlights) is kept as a transparent background layer. Text stays editable line by line.
+- **Flowing document** — reflows paragraphs and tables with `pdf2docx` for easier editing.
 
 The browser is not used as a silent upload path; the user chooses the server engine. The server DOCX is downloaded as a real Office package and validated on the client (ZIP structure, document body, related parts and image formats) before a link is shown.
 

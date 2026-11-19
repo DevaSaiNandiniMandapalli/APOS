@@ -25,6 +25,7 @@ export type PdfLine = {
   bold: boolean;
   italic: boolean;
   fontName: string;
+  fontFamily?: string;
   cells: PdfLineCell[];
 };
 
@@ -136,6 +137,7 @@ export function groupTextLines(items: readonly PdfRawTextItem[]): PdfLine[] {
     let maxX = 0;
     const sizes: Array<{ size: number; weight: number }> = [];
     const fontWeights = new Map<string, number>();
+    const familyWeights = new Map<string, number>();
     let boldWeight = 0;
     let italicWeight = 0;
 
@@ -158,6 +160,7 @@ export function groupTextLines(items: readonly PdfRawTextItem[]): PdfLine[] {
       sizes.push({ size: item.fontSize, weight: Math.max(1, value.length) });
       const fontName = item.fontName ?? "";
       fontWeights.set(fontName, (fontWeights.get(fontName) ?? 0) + value.length);
+      if (item.fontFamily) familyWeights.set(item.fontFamily, (familyWeights.get(item.fontFamily) ?? 0) + value.length);
       if (item.bold || isBoldFont(fontName)) boldWeight += value.length;
       if (item.italic || isItalicFont(fontName)) italicWeight += value.length;
     }
@@ -166,6 +169,7 @@ export function groupTextLines(items: readonly PdfRawTextItem[]): PdfLine[] {
     const totalSizeWeight = sizes.reduce((total, entry) => total + entry.weight, 0) || 1;
     const fontSize = sizes.reduce((total, entry) => total + entry.size * entry.weight, 0) / totalSizeWeight;
     const fontName = [...fontWeights.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? "";
+    const fontFamily = [...familyWeights.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? "";
 
     const cells: PdfLineCell[] = [];
     let cellText = "";
@@ -199,6 +203,7 @@ export function groupTextLines(items: readonly PdfRawTextItem[]): PdfLine[] {
       bold: boldWeight / totalLetters >= 0.5,
       italic: italicWeight / totalLetters >= 0.5,
       fontName,
+      fontFamily,
       cells,
     };
   }).filter((line) => line.text.length > 0);

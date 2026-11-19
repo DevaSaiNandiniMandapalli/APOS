@@ -460,6 +460,7 @@ export type DocxContentBlock =
   | { kind: "list"; text: string; indent?: number; runs?: DocxRun[]; ordered?: boolean }
   | { kind: "table"; rows: string[][]; header?: boolean; bordered?: boolean }
   | { kind: "image"; bytes: Uint8Array; format: "png" | "jpeg"; width: number; height: number; maxWidth?: number; maxHeight?: number; alt?: string; anchor?: { x: number; y: number; width: number; height: number; pageWidth: number; pageHeight: number; behindText?: boolean } }
+  | { kind: "positionedText"; text: string; x: number; top: number; width: number; fontSize: number; bold?: boolean; italic?: boolean; font?: string }
   | { kind: "pageBreak" }
   | { kind: "sectionBreak"; pageWidth: number; pageHeight: number };
 
@@ -527,6 +528,35 @@ function docxSectionProperties(pageWidth: number, pageHeight: number) {
   return `<w:sectPr><w:type w:val="nextPage"/><w:pgSz w:w="${width}" w:h="${height}"${width > height ? ' w:orient="landscape"' : ""}/><w:pgMar w:top="720" w:right="720" w:bottom="720" w:left="720" w:header="360" w:footer="360" w:gutter="0"/></w:sectPr>`;
 }
 
+function wordFontFamily(family: string | undefined) {
+  const name = family ?? "";
+  if (/mono|courier|consolas|menlo/i.test(name)) return "Courier New";
+  if (/calibri|carlito/i.test(name)) return "Calibri";
+  if (/cambria|caladea/i.test(name)) return "Cambria";
+  if (/georgia|times|garamond|palatino|book antiqua|serif/i.test(name) && !/sans/i.test(name)) return "Times New Roman";
+  if (/verdana/i.test(name)) return "Verdana";
+  if (/tahoma/i.test(name)) return "Tahoma";
+  return "Arial";
+}
+
+function docxPositionedParagraph(block: Extract<DocxContentBlock, { kind: "positionedText" }>) {
+  const font = wordFontFamily(block.font);
+  const x = Math.max(0, Math.round(block.x * 20));
+  const top = Math.max(0, Math.round(block.top * 20));
+  const width = Math.max(120, Math.round(block.width * 20));
+  const height = Math.max(120, Math.round((block.fontSize * 1.45 + 2) * 20));
+  const halfPoints = Math.max(2, Math.round(block.fontSize * 2));
+  const runProperties = [
+    `<w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:eastAsia="${font}" w:cs="${font}"/>`,
+    block.bold ? "<w:b/><w:bCs/>" : "",
+    block.italic ? "<w:i/><w:iCs/>" : "",
+    `<w:sz w:val="${halfPoints}"/><w:szCs w:val="${halfPoints}"/>`,
+  ].join("");
+  const frame = `<w:framePr w:w="${width}" w:h="${height}" w:x="${x}" w:y="${top}" w:hAnchor="page" w:vAnchor="page" w:wrap="none" w:hRule="atLeast"/>`;
+  const paragraph = '<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:ind w:left="0" w:right="0" w:firstLine="0"/><w:jc w:val="left"/>';
+  return `<w:p><w:pPr>${frame}${paragraph}</w:pPr><w:r><w:rPr>${runProperties}</w:rPr><w:t xml:space="preserve">${xmlEscape(block.text)}</w:t></w:r></w:p>`;
+}
+
 function docxTable(rows: string[][], header: boolean, bordered = false) {
   const cleanRows = rows
     .map((row) => row.map((cell) => String(cell ?? "")))
@@ -584,6 +614,8 @@ export function buildDocxDocument(
     } else if (block.kind === "table") {
       content.push(docxTable(block.rows, block.header !== false, block.bordered === true));
       content.push("<w:p/>");
+    } else if (block.kind === "positionedText") {
+      content.push(docxPositionedParagraph(block));
     } else if (block.kind === "pageBreak") {
       content.push('<w:p><w:r><w:br w:type="page"/></w:r></w:p>');
     } else if (block.kind === "sectionBreak") {

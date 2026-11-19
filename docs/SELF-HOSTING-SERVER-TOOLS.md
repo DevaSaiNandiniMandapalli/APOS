@@ -14,7 +14,7 @@ The complete processing package under `backend/apos_processing` provides 32 tool
 - Crop PDF, page removal, merge/split/organize/rotate
 - PDF to Word (exact page layout with editable text, anchored pictures and vector artwork; or reflowing `pdf2docx` mode; page ranges, optional OCR), PDF to Excel, PDF to PowerPoint
 
-The main `/tools/pdf-to-office` page uses this server Word engine when the user explicitly selects **Exact page layout server**; its default remains browser-local. The server offers **Exact page layout** (text frames at PDF baselines, pictures at source boxes, vector layer preserved) and **Flowing document** (normal reflowing paragraphs and tables).
+The main `/tools/pdf-to-office` page defaults to browser-local **Exact positions** (text frames at PDF baselines and pictures at source boxes, no upload). Selecting **Exact page layout server** adds vector-artwork preservation and optional server OCR. The server offers **Exact page layout** (text frames, anchored pictures, vector layer preserved) and **Flowing document** (normal reflowing paragraphs and tables).
 - Images/Office/HTML to PDF
 - PDF/A conversion
 - Compress via Ghostscript, watermark and page numbers

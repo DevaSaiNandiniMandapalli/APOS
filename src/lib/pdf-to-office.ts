@@ -15,7 +15,7 @@ import { mergeOcrLines } from "./pdf-ocr";
 import { extractPdfStructure, type PdfPageBlock, type PdfPageStructure, type PdfStructure } from "./pdf-structured";
 
 export type PdfOfficeFormat = "docx" | "xlsx";
-export type PdfOfficeMode = "editable" | "visual";
+export type PdfOfficeMode = "editable" | "positions" | "visual";
 
 export type PdfOfficeSettings = {
   format: PdfOfficeFormat;
@@ -393,6 +393,161 @@ async function buildEditableWord(
   };
 }
 
+function pictureToDocxBlock(picture: PdfPicture, page: PdfPageStructure, anchored: boolean): DocxContentBlock {
+  const converted = dataUrlToImageBytes(picture.dataUrl);
+  return {
+    kind: "image",
+    bytes: converted.bytes,
+    format: converted.format,
+    width: Math.max(1, picture.boxWidth * (96 / 72)),
+    height: Math.max(1, picture.boxHeight * (96 / 72)),
+    maxWidth: Math.max(72, pageWidth(page) - 72),
+    maxHeight: Math.max(72, pageHeight(page) - 72),
+    alt: `Picture from PDF page ${page.page}`,
+    anchor: anchored ? {
+      x: picture.x,
+      y: picture.y,
+      width: Math.max(1, picture.boxWidth),
+      height: Math.max(1, picture.boxHeight),
+      pageWidth: picture.pageWidth,
+      pageHeight: picture.pageHeight,
+      behindText: true,
+    } : undefined,
+  };
+}
+
+async function buildPositionedWord(
+  structure: PdfStructure,
+  settings: PdfOfficeSettings,
+  pictureData: { pictures: readonly PdfPicture[] },
+  analysisByPage: ReadonlyMap<number, PdfPagePictureAnalysis>,
+  onProgress: (message: string) => void,
+): Promise<Omit<PdfOfficeResult, "fileName" | "mime">> {
+  const picturesByPage = new Map<number, PdfPicture[]>();
+  for (const picture of pictureData.pictures) {
+    const list = picturesByPage.get(picture.page) ?? [];
+    list.push(picture);
+    picturesByPage.set(picture.page, list);
+  }
+
+  const blocks: DocxContentBlock[] = [];
+  let textLines = 0;
+  let pictureCount = 0;
+  let rasterPages = 0;
+  let blankPages = 0;
+
+  for (let index = 0; index < structure.pages.length; index += 1) {
+    const page = structure.pages[index];
+    if (index > 0) addPageBoundary(blocks, structure.pages[index - 1], page, true);
+    const pagePictures = picturesByPage.get(page.page) ?? [];
+    const fullPage = pagePictures.find((picture) => picture.fullPage);
+    const analysis = analysisByPage.get(page.page);
+    if (fullPage && (analysis?.fullPage || !page.text.trim())) {
+      const converted = dataUrlToImageBytes(fullPage.dataUrl);
+      blocks.push({
+        kind: "image",
+        bytes: converted.bytes,
+        format: converted.format,
+        width: Math.max(1, pageWidth(page) * (96 / 72)),
+        height: Math.max(1, pageHeight(page) * (96 / 72)),
+        anchor: {
+          x: 0,
+          y: 0,
+          width: pageWidth(page),
+          height: pageHeight(page),
+          pageWidth: pageWidth(page),
+          pageHeight: pageHeight(page),
+          behindText: true,
+        },
+        alt: `Scanned page ${page.page}`,
+      });
+      pictureCount += 1;
+      rasterPages += 1;
+      continue;
+    }
+
+    if (settings.includePictures) {
+      for (const picture of pagePictures) {
+        if (picture.fullPage) continue;
+        blocks.push(pictureToDocxBlock(picture, page, true));
+        pictureCount += 1;
+      }
+    }
+
+    for (const line of page.lines) {
+      if (!line.text.trim()) continue;
+      blocks.push({
+        kind: "positionedText",
+        text: line.text,
+        x: Math.max(0, line.x),
+        top: Math.max(0, pageHeight(page) - line.y - line.fontSize * 0.93),
+        width: Math.max(24, line.width * 1.12 + 6),
+        fontSize: line.fontSize,
+        bold: line.bold,
+        italic: line.italic,
+        font: line.fontFamily || line.fontName,
+      });
+      textLines += 1;
+    }
+    if (!page.text.trim() && !pagePictures.length) blankPages += 1;
+  }
+
+  if (!blocks.length) throw new PdfOfficeError("no-content", "No text lines or pictures could be placed. The selected pages may be blank.");
+  onProgress("Writing the Word document…");
+  const lastPage = structure.pages[structure.pages.length - 1];
+  const bytes = buildDocxDocument(
+    blocks,
+    structure.metadata.title || safeOfficeName(settings.outputName, "document"),
+    { width: pageWidth(lastPage), height: pageHeight(lastPage) },
+  );
+  const { xml, entries } = validateDocxDocument(bytes);
+  if (bytes.byteLength > OUTPUT_LIMIT) {
+    throw new PdfOfficeError("too-large", "The generated Word file exceeds the 30 MB output limit. Convert fewer pages or disable pictures.");
+  }
+  if (textLines > 0 && (xml.match(/<w:framePr/g) ?? []).length < textLines) {
+    throw new PdfOfficeError("invalid-output", "The generated Word file is missing one or more positioned text lines.");
+  }
+  if (pictureCount > 0 && (xml.match(/<wp:anchor/g) ?? []).length < pictureCount) {
+    throw new PdfOfficeError("invalid-output", "The generated Word file is missing one or more anchored pictures.");
+  }
+  if (pictureCount > 0 && !Object.keys(entries).some((name) => name.startsWith("word/media/"))) {
+    throw new PdfOfficeError("invalid-output", "The generated Word file has no embedded picture data.");
+  }
+  for (const page of structure.pages) {
+    if (analysisByPage.get(page.page)?.fullPage) continue;
+    for (const line of page.lines) {
+      const marker = line.text.trim().slice(0, 80);
+      if (marker.length >= 4 && !xml.includes(xmlEscape(marker))) {
+        throw new PdfOfficeError("invalid-output", `The generated Word file is missing text from page ${page.page}.`);
+      }
+    }
+  }
+
+  const warnings = [
+    "Browser exact positions keeps text lines, pictures and page sizes at their PDF coordinates. Charts, rules and other vector artwork are not reproduced; use the server exact-layout engine when those must be preserved.",
+  ];
+  if (rasterPages) warnings.push(`${rasterPages} scanned or full-page-image page(s) were kept as page pictures and are not editable.`);
+
+  return {
+    bytes,
+    detail: `${structure.selectedPages.length} page(s): ${textLines} positioned text line(s) and ${pictureCount} picture(s) placed at their source coordinates${rasterPages ? `, including ${rasterPages} page picture(s)` : ""}.`,
+    stats: {
+      pages: structure.selectedPages.length,
+      textPages: structure.pages.filter((page) => page.text.trim() && !analysisByPage.get(page.page)?.fullPage).length,
+      scannedPages: rasterPages,
+      blankPages,
+      ocrPages: 0,
+      paragraphs: textLines,
+      headings: 0,
+      tables: 0,
+      pictures: pictureCount,
+      skippedFullPageImages: 0,
+      unplacedImages: 0,
+      warnings,
+    },
+  };
+}
+
 async function buildVisualWord(
   file: File,
   structure: PdfStructure,
@@ -603,6 +758,24 @@ export async function convertPdfToOffice(
     const converted = await buildWorkbook(structure, settings);
     const base = safeOfficeName(settings.outputName || file.name, file.name);
     return { ...converted, fileName: `${base}.${settings.format}`, mime: OFFICE_MIME[settings.format] };
+  }
+
+  if (settings.mode === "positions") {
+    options.onProgress("Checking page pictures and text positions…");
+    const pictureData = await extractPdfPictureDataFromFile(file, {
+      pages: structure.selectedPages,
+      signal: options.signal,
+      includeFullPage: true,
+      onProgress: (completed, total) => options.onProgress(`Inspecting page pictures ${completed} of ${total}…`),
+    });
+    const analysisByPage = new Map(pictureData.pages.map((page) => [page.page, page]));
+    if (!structure.pages.length) throw new PdfOfficeError("no-content", "The selected PDF has no pages.");
+    if (structure.characterCount === 0 && pictureData.pictures.length === 0) {
+      throw new PdfOfficeError("no-content", "No selectable text or picture content was found. Scanned PDFs need OCR or the OCR PDF tool.", structure.emptyPages);
+    }
+    const converted = await buildPositionedWord(structure, settings, pictureData, analysisByPage, options.onProgress);
+    const base = safeOfficeName(settings.outputName || file.name, file.name);
+    return { ...converted, fileName: `${base}.docx`, mime: OFFICE_MIME.docx };
   }
 
   if (settings.mode === "visual") {
