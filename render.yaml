@@ -1,18 +1,29 @@
+# Render blueprint for the optional APOS processing API.
+#
+# Deploy: Render dashboard -> New -> Blueprint -> pick this repository.
+# Render reads this file and creates the service automatically.
+#
+# The service is stateless: no database, no disk, no persistent storage.
+# Uploads are held in memory or a temporary directory that is removed before
+# the response returns.
 services:
   - type: web
-    name: apos
-    runtime: node
+    name: apos-api
+    runtime: docker
     plan: free
-    region: oregon
-    branch: lemon/design-and-build
-    repo: https://github.com/DevaSaiNandiniMandapalli/APOS
-    buildCommand: npm ci && npm run build
-    startCommand: npm run start -- -H 0.0.0.0 -p $PORT
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/v1/health
     autoDeploy: true
     envVars:
-      - key: NODE_VERSION
-        value: "22"
-      - key: NEXT_TELEMETRY_DISABLED
-        value: "1"
-      - key: SARVAM_API_KEY
-        sync: false
+      - key: CORS_ORIGINS
+        value: https://apos.nxtgensec.org
+      - key: APOS_MAX_UPLOAD_MB
+        value: "50"
+      - key: APOS_MAX_FILES
+        value: "20"
+      - key: APOS_RATE_LIMIT_REQUESTS
+        value: "120"
+      - key: APOS_RATE_LIMIT_WINDOW
+        value: "60"
