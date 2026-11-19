@@ -564,6 +564,9 @@ test("split cancellation terminates its worker without producing downloads", asy
       if (message && typeof message === "object" && "mode" in message) {
         tracked.add(this);
         (window as unknown as { __splitWorkerPosted: boolean }).__splitWorkerPosted = true;
+        // Hold the job so the cancel path is deterministic instead of racing a
+        // fast reply.
+        return;
       }
       return Reflect.apply(postMessage, this, [message, transfer]);
     } });
@@ -597,6 +600,9 @@ test("leaving the Split PDF route terminates its active worker", async ({ page }
       if (message && typeof message === "object" && "mode" in message) {
         tracked.add(this);
         (window as unknown as { __splitWorkerPosted: boolean }).__splitWorkerPosted = true;
+        // Hold the job so the cancel path is deterministic instead of racing a
+        // fast reply.
+        return;
       }
       return Reflect.apply(postMessage, this, [message, transfer]);
     } });
@@ -999,6 +1005,9 @@ test("each page organization action cancels and terminates its active worker", a
       if (message && typeof message === "object" && (message as { action?: string }).action === "organize") {
         operationWorkers.add(this);
         (window as unknown as { __organizeWorkerPosted: boolean }).__organizeWorkerPosted = true;
+        // Hold the job so the cancel path is deterministic instead of racing a
+        // fast reply.
+        return;
       }
       return Reflect.apply(postMessage, this, [message, transfer]);
     } });
