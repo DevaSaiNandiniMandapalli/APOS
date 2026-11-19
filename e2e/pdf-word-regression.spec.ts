@@ -186,6 +186,7 @@ test("OCR-enabled Editable Word inserts recognised text and no page screenshot",
   pdf.addPage([595, 842]).drawImage(image, { x: 0, y: 0, width: 595, height: 842 });
   await page.getByLabel("Choose a file").setInputFiles({ name: "ocr.pdf", mimeType: "application/pdf", buffer: Buffer.from(await pdf.save()) });
   await expect(page.getByRole("heading", { name: "Document preview" })).toBeVisible({ timeout: 30000 });
+  await page.getByLabel("Word mode").selectOption("editable");
   await page.getByLabel(/OCR image-only pages/).check();
   await page.getByRole("button", { name: "Convert PDF" }).click();
   await expect(page.locator(".merge-success")).toBeVisible({ timeout: 240000 });

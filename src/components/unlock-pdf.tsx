@@ -10,11 +10,12 @@ export default function UnlockPdf() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [mode, setMode] = useState<"text" | "images" | null>(null);
   const [error, setError] = useState("");
   const [url, setUrl] = useState<string | null>(null);
   const urlRef = useRef<string | null>(null);
 
-  const clear = () => { if (urlRef.current) URL.revokeObjectURL(urlRef.current); urlRef.current = null; setUrl(null); };
+  const clear = () => { if (urlRef.current) URL.revokeObjectURL(urlRef.current); urlRef.current = null; setUrl(null); setMode(null); };
   const choose = async (selected?: File) => {
     clear(); setError(""); setFile(null);
     if (!selected) return;
@@ -28,8 +29,9 @@ export default function UnlockPdf() {
     if (!file) return;
     clear(); setError(""); setBusy(true); setProgress(null);
     try {
-      const bytes = await unlockPdf(file, password, { onProgress: (done, total) => setProgress({ done, total }) });
-      const url = URL.createObjectURL(new Blob([new Uint8Array(bytes).slice().buffer as ArrayBuffer], { type: "application/pdf" }));
+      const result = await unlockPdf(file, password, { onProgress: (done, total) => setProgress({ done, total }) });
+      setMode(result.mode);
+      const url = URL.createObjectURL(new Blob([new Uint8Array(result.bytes).slice().buffer as ArrayBuffer], { type: "application/pdf" }));
       urlRef.current = url; setUrl(url);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "This PDF could not be unlocked."); }
     finally { setBusy(false); setProgress(null); }
@@ -38,7 +40,7 @@ export default function UnlockPdf() {
 
   return <section className="merge-panel" aria-labelledby="unlock-heading">
     <h2 id="unlock-heading">Remove a PDF password on this device</h2>
-    <p>Open the file with the password you already know and APOS writes a new copy that no longer asks for it. The copy is rebuilt page by page as images, so the text layer is not preserved.</p>
+    <p>Open the file with the password you already know and APOS writes a new copy that no longer asks for it. APOS first rebuilds a text-preserving copy; if the PDF uses encryption the browser library cannot rewrite, it falls back to page images. Forms, bookmarks and attachments are not preserved in either mode.</p>
     <div className="privacy-note">Only use this on documents you are allowed to open. The password and the file stay on this device.</div>
     <label className="file-picker">Choose a locked PDF<input type="file" accept="application/pdf,.pdf" disabled={busy} onChange={(event) => { void choose(event.currentTarget.files?.[0]); event.currentTarget.value = ""; }}/></label>
     {file && <div className="split-settings">
@@ -49,6 +51,6 @@ export default function UnlockPdf() {
     <div className="merge-actions"><button type="button" className="hero-cta" disabled={!file || busy || !password} onClick={() => void run()}>{busy ? "Unlocking…" : "Unlock PDF"}</button></div>
     {busy && <p role="status" aria-live="polite">{progress ? `Rebuilding page ${progress.done} of ${progress.total}…` : "Opening the document…"}</p>}
     {error && <p role="alert" className="merge-error">{error}</p>}
-    {url && <p role="status" className="merge-success"><a href={url} download={`${safeFileStem(file?.name ?? "document")}-unlocked.pdf`}>Download unlocked PDF</a></p>}
+    {url && <div className="merge-success"><p role="status">{mode === "text" ? "Unlocked with the text layer preserved. Review the result; forms, bookmarks and attachments may be missing." : "Unlocked as page images. The text layer and forms were not preserved."}</p><a href={url} download={`${safeFileStem(file?.name ?? "document")}-unlocked.pdf`}>Download unlocked PDF</a></div>}
   </section>;
 }

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { studioDefinitions, toolDefinitions } from "@/lib/registry";
 
-const FEATURED = ["merge-pdf", "split-pdf", "compress-pdf", "repair-pdf", "optimize-pdf", "pdf-to-office", "ocr-pdf", "ai-document-agent"];
+const FEATURED = ["merge-pdf", "split-pdf", "compress-pdf", "repair-pdf", "optimize-pdf", "pdf-to-office", "ocr-pdf", "ai-document-agent", "document-passport"];
 
 export default function SiteFooter({ excludeStudio, excludeTool }: { excludeStudio?: string; excludeTool?: string } = {}) {
   const tools = FEATURED.filter((id) => id !== excludeTool).map((id) => toolDefinitions.find((tool) => tool.id === id)).filter(Boolean);

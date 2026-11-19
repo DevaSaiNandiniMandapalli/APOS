@@ -14,7 +14,7 @@ export const metadata: Metadata = pageMetadata({
   description:
     "Direct answers about APOS: whether files are uploaded, what it costs, which PDF and Office tools work today, file limits, the AI model behind the writing features and how damaged PDFs are repaired.",
   path: "/faq",
-  keywords: ["APOS FAQ", "private PDF tools", "is APOS free", "PDF tools no upload", "browser PDF converter"],
+  keywords: ["APOS FAQ", "private PDF tools", "is APOS free", "browser PDF tools", "local PDF converter"],
 });
 
 export default function FaqPage() {

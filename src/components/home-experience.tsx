@@ -7,14 +7,14 @@ import {
   Clock3, Combine, Command, FilePenLine, FileText, FileType, Image, ImagePlus, LayoutGrid, ListChecks,
   Menu, Minimize2, Moon, PanelsTopLeft, PenLine, PenTool, Presentation, Repeat2, ScanLine, ScanSearch,
   ScanText, Search, Sheet, ShieldCheck, Sparkles, Sun, Table2, WandSparkles, Workflow, Wrench,
-  Code2, FileOutput, X
+  Code2, FileOutput, X, Fingerprint
 } from "lucide-react";
 import { navigation, searchTools, studioDefinitions, studioById, toolDefinitions } from "@/lib/registry";
 import { siteFaqs } from "@/lib/faq";
 import FaqList from "@/components/faq-list";
 import SiteFooter from "@/components/site-footer";
 
-const icons = { FileText, Repeat2, PenLine, PanelsTopLeft, ShieldCheck, Sparkles, Image, ScanText, FileType, Table2, Presentation, WandSparkles, Workflow, Wrench, Code2, Combine, FilePenLine, LayoutGrid, PenTool, Minimize2, ImagePlus, ScanLine, FileOutput, Sheet, ListChecks, ScanSearch };
+const icons = { FileText, Repeat2, PenLine, PanelsTopLeft, ShieldCheck, Sparkles, Image, ScanText, FileType, Table2, Presentation, WandSparkles, Workflow, Wrench, Code2, Combine, FilePenLine, LayoutGrid, PenTool, Minimize2, ImagePlus, ScanLine, FileOutput, Sheet, ListChecks, ScanSearch, Fingerprint };
 const studioIcons = Object.fromEntries(studioDefinitions.map((s) => [s.id, icons[s.icon as keyof typeof icons] ?? FileText]));
 const toolIcons = Object.fromEntries(toolDefinitions.map((t) => [t.id, icons[t.icon as keyof typeof icons] ?? FileText]));
 
@@ -76,7 +76,7 @@ export default function Home() {
           {[0, 1].map((copy) => <div className="ticker-group" key={copy} aria-hidden={copy === 1 ? "true" : undefined}>
             {[
               [String(toolDefinitions.length), "tools, one workspace"],
-              ["No file uploads", "documents stay on your device"],
+              ["Local by default", "core tools stay on your device"],
               ["PDF ↔ Word ↔ Excel", "real files, not screenshots"],
               ["Sarvam 105B", "summaries and document drafting"],
               ["OCR", "scans become searchable PDFs"],
@@ -98,10 +98,10 @@ export default function Home() {
         <section className="answer-box home-answer" aria-labelledby="what-is-apos">
           <div className="section-eyebrow">WHAT APOS IS</div>
           <h2 id="what-is-apos">A document workspace where your files stay on your device</h2>
-          <p>APOS gathers {toolDefinitions.length} PDF and Office tools into {studioDefinitions.length} studios: merge, split, rotate, reorder and extract PDF pages, compress, repair and optimise broken files, run OCR on scans, convert PDF to Word or Excel and back, protect documents with AES-256, draft and summarise text with AI, and build repeatable workflows. Every document tool runs locally in your browser, so your files are never uploaded and no account is needed. The three AI writing tools are the only exception: they send the text you submit to Sarvam 105B. An optional self-hosted server adds native engines for advanced Office and PDF operations; those tools are kept on a clearly labelled server-tools page.</p>
+          <p>APOS gathers {toolDefinitions.length} PDF and Office tools into {studioDefinitions.length} studios: merge, split, rotate, reorder and extract PDF pages, compress, repair and optimise broken files, run OCR on scans, convert PDF to Word or Excel and back, protect documents with AES-256, draft and summarise text with AI, and build repeatable workflows. Browser-local document tools process on your device and need no account. The three AI writing tools read the file locally but send the extracted text you choose to process to Sarvam 105B. Optional server modes for advanced Office and PDF operations are clearly labelled, off by default, and upload only when you select them.</p>
           <ul className="answer-points">
             <li><strong>{toolDefinitions.filter((tool) => tool.status === "available").length} tools ready now</strong><span>Each one tested with real files before it was listed as available.</span></li>
-            <li><strong>No file uploads</strong><span>WebAssembly and web workers process documents on your own machine.</span></li>
+            <li><strong>Local-first core</strong><span>WebAssembly and web workers process documents on your own machine. AI and server modes are disclosed before use.</span></li>
             <li><strong>Measured results</strong><span>Compression, repair and optimisation report real bytes and pages, verified by re-opening the output.</span></li>
           </ul>
           <Link className="text-link" href="/studios">Browse all studios and tools <ArrowRight size={15}/></Link>

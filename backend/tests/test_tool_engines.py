@@ -161,6 +161,19 @@ def test_auto_redact_removes_the_detected_text() -> None:
     assert "+1 555 123 4567" not in extracted
 
 
+def test_pdf_to_excel_writes_untrusted_pdf_text_as_text_not_formulas() -> None:
+    response = post(
+        "pdf_to_excel",
+        [("files", ("formula.pdf", text_pdf('=HYPERLINK("https://example.com","Click")'), "application/pdf"))],
+    )
+    assert response.status_code == 200, response.text
+    archive = zipfile.ZipFile(io.BytesIO(response.content))
+    sheet = archive.read("xl/worksheets/sheet1.xml").decode()
+    assert "<f>" not in sheet
+    assert "HYPERLINK" in sheet
+    assert 't="inlineStr"' in sheet or 't="s"' in sheet or "<is>" in sheet
+
+
 def test_self_signed_pades_signature_can_be_verified() -> None:
     signed = post("sign", [("files", ("contract.pdf", text_pdf(), "application/pdf"))], {
         "name": "APOS Test Signer",

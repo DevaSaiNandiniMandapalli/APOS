@@ -20,7 +20,8 @@ export const studioDefinitions = [
 
 export type StudioId = typeof studioDefinitions[number]["id"];
 export type ToolStatus = "planned" | "in-development" | "available" | "unavailable";
-type ToolDefinition = { id: string; name: string; studioId: StudioId; description: string; status: ToolStatus; icon: string; unavailableReason?: string };
+export type ToolProcessing = "browser" | "ai" | "server-optional";
+export type ToolDefinition = { id: string; name: string; studioId: StudioId; description: string; status: ToolStatus; icon: string; processing?: ToolProcessing; unavailableReason?: string };
 export const studioById = Object.fromEntries(studioDefinitions.map((studio) => [studio.id, studio])) as Record<StudioId, typeof studioDefinitions[number]>;
 
 export const exhaustiveStudioCoverage = {
@@ -45,7 +46,7 @@ export const toolDefinitions: readonly ToolDefinition[] = [
   { id: "merge-pdf", name: "Merge PDF", studioId: "pdf-essentials", description: "Combine up to 10 PDFs with page counts, thumbnails and drag-to-reorder on this device.", status: "available", icon: "Combine" },
   { id: "split-pdf", name: "Split PDF", studioId: "pdf-essentials", description: "Extract pages, split every page, use custom ranges or equal groups, and download a ZIP on this device.", status: "available", icon: "Scissors" },
   { id: "rotate-pdf", name: "Rotate PDF", studioId: "pdf-essentials", description: "Preview pages and rotate all, selected, or individual pages on this device.", status: "available", icon: "RotateCw" },
-  { id: "pdf-to-office", name: "PDF to Office", studioId: "pdf-conversion", description: "Rebuild PDF text, detected tables and content pictures into editable Word or Excel. Image-only pages need OCR; Visual Word is separate, and an optional self-hosted layout engine is available when configured.", status: "available", icon: "ArrowRightLeft" },
+  { id: "pdf-to-office", name: "PDF to Office", studioId: "pdf-conversion", description: "Rebuild PDF text, detected tables and content pictures into editable Word or Excel. Image-only pages need OCR; Visual Word is separate, and an optional self-hosted layout engine is available when configured.", status: "available", icon: "ArrowRightLeft", processing: "server-optional" },
   { id: "edit-pdf", name: "Edit PDF", studioId: "pdf-editor", description: "Annotate a PDF, cover and replace text visually, and download a flattened copy.", status: "available", icon: "FilePenLine" },
   { id: "organize-pages", name: "Reorder PDF pages", studioId: "pdf-organizer-layout", description: "Arrange every page into a new order on this device.", status: "available", icon: "LayoutGrid" },
   { id: "delete-pdf-pages", name: "Delete PDF pages", studioId: "pdf-organizer-layout", description: "Remove selected pages from a PDF on this device.", status: "available", icon: "Trash2" },
@@ -69,25 +70,64 @@ export const toolDefinitions: readonly ToolDefinition[] = [
   { id: "ocr-image", name: "Image OCR", studioId: "ocr-scanning-studio", description: "Extract text from a scanned image in your browser.", status: "available", icon: "ScanText" },
   { id: "ocr-pdf", name: "OCR PDF", studioId: "ocr-scanning-studio", description: "Recognize text in scanned PDF pages and download a searchable PDF or plain text.", status: "available", icon: "ScanLine" },
   { id: "document-editor", name: "Document editor", studioId: "document-studio", description: "Write, import and format rich-text documents in the browser, then export PDF.", status: "available", icon: "FileText" },
-  { id: "document-to-pdf", name: "Document to PDF", studioId: "document-studio", description: "Turn a Word, text or Markdown document into a PDF. An optional server engine keeps the original layout.", status: "available", icon: "FileOutput" },
+  { id: "document-to-pdf", name: "Document to PDF", studioId: "document-studio", description: "Turn a Word, text or Markdown document into a PDF. An optional server engine keeps the original layout.", status: "available", icon: "FileOutput", processing: "server-optional" },
   { id: "spreadsheet-editor", name: "Spreadsheet Editor", studioId: "spreadsheet-studio", description: "Build a sheet with formulas and export it as CSV, on this device.", status: "available", icon: "Sheet" },
   { id: "presentation-editor", name: "Presentation Editor", studioId: "presentation-studio", description: "Build, present and export a slide deck as PDF, on this device.", status: "available", icon: "Presentation" },
   { id: "spreadsheet-to-pdf", name: "Spreadsheet to PDF", studioId: "spreadsheet-studio", description: "Print an Excel or CSV file as a paginated PDF.", status: "available", icon: "Sheet" },
   { id: "presentation-to-pdf", name: "Presentation to PDF", studioId: "presentation-studio", description: "Export slides as a text-faithful PDF.", status: "available", icon: "Presentation" },
-  { id: "ai-assistant", name: "AI assistant", studioId: "ai-studio", description: "Summarize, rewrite or explain text with Sarvam 105B (server-configured).", status: "available", icon: "WandSparkles" },
-  { id: "document-summary", name: "Document summary", studioId: "ai-studio", description: "Summarize a PDF, Word or text file with Sarvam 105B.", status: "available", icon: "ListChecks" },
-  { id: "ai-document-agent", name: "AI document agent", studioId: "ai-studio", description: "Turn a PDF or Word file into a new Word document that follows your instructions.", status: "available", icon: "Bot" },
+  { id: "ai-assistant", name: "AI assistant", studioId: "ai-studio", description: "Summarize, rewrite or explain text with Sarvam 105B (server-configured).", status: "available", icon: "WandSparkles", processing: "ai" },
+  { id: "document-summary", name: "Document summary", studioId: "ai-studio", description: "Summarize a PDF, Word or text file with Sarvam 105B.", status: "available", icon: "ListChecks", processing: "ai" },
+  { id: "ai-document-agent", name: "AI document agent", studioId: "ai-studio", description: "Turn a PDF or Word file into a new Word document that follows your instructions.", status: "available", icon: "Bot", processing: "ai" },
   { id: "universal-converter", name: "Convert anything", studioId: "ai-studio", description: "Name the format you want and APOS picks the right converter for the file.", status: "available", icon: "Repeat2" },
   { id: "workflow-builder", name: "Workflow builder", studioId: "automation-studio", description: "Design a sequence of PDF steps and run it on your own files in the browser.", status: "available", icon: "Workflow" },
   { id: "file-inspector", name: "File inspector", studioId: "utility-studio", description: "Review basic properties of a document file.", status: "available", icon: "ScanSearch" },
+  { id: "document-passport", name: "Document Passport", studioId: "utility-studio", description: "Fingerprint a document, reveal metadata, attachments, forms, hidden objects and sharing risks, then create a clean PDF copy.", status: "available", icon: "Fingerprint" },
   { id: "pdf-metadata", name: "PDF metadata", studioId: "developer-studio", description: "Inspect and edit supported standard PDF document-information fields.", status: "available", icon: "Braces" }
 ];
 
 const studioSchema = z.object({ id: z.string().min(1), name: z.string().min(1), description: z.string().min(1), icon: z.string().min(1), accent: z.string().min(1) }).strict();
 const statusSchema = z.enum(["planned", "in-development", "available", "unavailable"]);
-const toolSchema = z.object({ id: z.string().min(1), name: z.string().min(1), studioId: z.string().min(1), description: z.string().min(1), status: statusSchema, icon: z.string().min(1), unavailableReason: z.string().min(1).optional() }).strict().superRefine((tool, ctx) => {
+const processingSchema = z.enum(["browser", "ai", "server-optional"]);
+const toolSchema = z.object({ id: z.string().min(1), name: z.string().min(1), studioId: z.string().min(1), description: z.string().min(1), status: statusSchema, icon: z.string().min(1), processing: processingSchema.optional(), unavailableReason: z.string().min(1).optional() }).strict().superRefine((tool, ctx) => {
   if (tool.status === "unavailable" && !tool.unavailableReason) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["unavailableReason"], message: "Unavailable tools need an explanation." });
 });
+
+export function processingMode(tool: Pick<ToolDefinition, "processing">): ToolProcessing {
+  return tool.processing ?? "browser";
+}
+
+export function processingSummary(tool: Pick<ToolDefinition, "processing">): string {
+  const mode = processingMode(tool);
+  if (mode === "ai") return "Reads the file in your browser and sends only the extracted text to the configured AI service.";
+  if (mode === "server-optional") return "Runs in your browser by default; an explicitly selected server mode uploads the document to your configured processing server.";
+  return "Runs entirely in this browser; the file is not uploaded.";
+}
+
+export function processingDisclosure(tool: Pick<ToolDefinition, "processing">): string {
+  const mode = processingMode(tool);
+  if (mode === "ai") return "It is free to use and needs no account. Files are read inside your browser; only the text you choose to process — typed text or text extracted from a file — is sent to the configured Sarvam 105B service. The API key never reaches your browser.";
+  if (mode === "server-optional") return "It is free to use and needs no account. Browser mode processes the document on this device. If you explicitly select the optional server mode, the document is uploaded to the configured APOS processing server instead.";
+  return "It is free to use, needs no account, and runs entirely inside your browser, so the document never leaves your device.";
+}
+
+export function processingSteps(tool: Pick<ToolDefinition, "processing">): { title: string; copy: string }[] {
+  const mode = processingMode(tool);
+  if (mode === "ai") return [
+    { title: "Choose a file or paste text", copy: "Files are read on this device; only the text you choose to process is sent for AI processing." },
+    { title: "Run the tool", copy: "The AI request uses the server-configured Sarvam endpoint, with live progress." },
+    { title: "Keep the result", copy: "Download the finished file; a source file is never uploaded." },
+  ];
+  if (mode === "server-optional") return [
+    { title: "Choose a file", copy: "Browser mode keeps it on this device. Server mode uploads it to your configured processing server." },
+    { title: "Pick an engine", copy: "The browser engine is the default; choose the server engine explicitly when you need native layout fidelity." },
+    { title: "Keep the result", copy: "Download the finished file and carry on." },
+  ];
+  return [
+    { title: "Choose a file", copy: "It stays on this device — nothing is uploaded." },
+    { title: "Run the tool", copy: "Processing happens in your browser, with live progress." },
+    { title: "Keep the result", copy: "Download the finished file and carry on." },
+  ];
+}
 
 export function validateRegistry(studios: unknown, tools: unknown) {
   const parsedStudios = z.array(studioSchema).min(1).parse(studios);

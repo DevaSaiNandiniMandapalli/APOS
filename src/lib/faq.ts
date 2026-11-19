@@ -11,7 +11,7 @@ export const siteFaqs: Faq[] = [
   {
     question: "Are my files uploaded to a server?",
     answer:
-      "No. Document tools run inside your browser using WebAssembly and web workers, so files are read from your disk and written back to your disk without an upload. The only data that leaves your device is text you explicitly send to the optional AI writing features.",
+      "Browser-local document tools run inside your browser, so files are read from your disk and written back without an upload. The three AI writing features read the file locally and send only the extracted text you choose to process to the configured Sarvam 105B service. Optional self-hosted server engines are off by default and upload only when you explicitly select them.",
   },
   {
     question: "Is APOS free?",

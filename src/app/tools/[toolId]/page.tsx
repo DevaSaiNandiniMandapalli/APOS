@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight } from "lucide-react";
-import { toolDefinitions, studioById } from "@/lib/registry";
+import { toolDefinitions, studioById, processingDisclosure, processingSteps } from "@/lib/registry";
 import { iconFor } from "@/lib/icons";
 import RouteHeader from "@/components/route-header";
 import ToolRenderer from "@/components/tool-renderer";
@@ -21,12 +21,6 @@ export async function generateMetadata({ params }: { params: Promise<{ toolId: s
   if (!tool) return { title: "Tool not found" };
   return toolMetadata(tool, studioById[tool.studioId]);
 }
-
-const STEPS = [
-  { title: "Choose a file", copy: "It stays on this device — nothing is uploaded." },
-  { title: "Run the tool", copy: "Processing happens in your browser, with live progress." },
-  { title: "Keep the result", copy: "Download the finished file and carry on." },
-];
 
 export default async function ToolPage({ params }: { params: Promise<{ toolId: string }> }) {
   const { toolId } = await params;
@@ -63,16 +57,14 @@ export default async function ToolPage({ params }: { params: Promise<{ toolId: s
         <p>
           {tool.name} lets you {tool.description.charAt(0).toLowerCase()}{tool.description.slice(1)}{" "}
           {tool.status === "available"
-            ? tool.id === "pdf-to-office"
-              ? "Its default conversion runs entirely in your browser. An optional, explicitly labelled layout-preserving engine uses the configured APOS processing server for documents you choose to send there."
-              : "It is free to use, needs no account, and runs entirely inside your browser, so the document never leaves your device."
+            ? processingDisclosure(tool)
             : "This tool is not released yet, and APOS says so plainly rather than offering a button that does nothing."}
         </p>
       </section>
 
       <div className="tool-panel moving-border">{<ToolRenderer toolId={tool.id} status={tool.status} />}</div>
       <section className="how" aria-label="How this tool works">
-        {STEPS.map((step, index) => <div className="how-step" key={step.title}>
+        {processingSteps(tool).map((step, index) => <div className="how-step" key={step.title}>
           <span className="how-dot">{index + 1}</span>
           <div><strong>{step.title}</strong><p>{step.copy}</p></div>
         </div>)}

@@ -4,8 +4,8 @@ export const SITE = {
   url: (process.env.NEXT_PUBLIC_SITE_URL || "https://apos.nxtgensec.org").replace(/\/$/, ""),
   tagline: "Private, browser-based PDF and office tools",
   description:
-    "APOS is a private document workspace with 39 browser-based PDF and Office tools: merge, split, compress, repair, optimise, OCR, convert PDF to Word or Excel, sign, protect and draft documents with AI. Files are processed on your device and never uploaded.",
-  shortDescription: "39 private PDF and Office tools that run in your browser.",
+    "APOS is a private document workspace with PDF and Office tools: merge, split, compress, repair, optimise, OCR, convert PDF to Word or Excel, sign, protect and draft documents with AI. Core tools process on your device; AI features and optional server modes are clearly disclosed.",
+  shortDescription: "Private, browser-first PDF and Office tools.",
   locale: "en_US",
   language: "en",
   themeColor: "#d42924",

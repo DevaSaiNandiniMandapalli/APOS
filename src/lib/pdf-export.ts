@@ -581,7 +581,9 @@ export async function exportAnnotatedPdf(
     }
   }
 
-  const needsText = meaningful.some((annotation) => annotation.kind === "text-box");
+  const needsText = meaningful.some(
+    (annotation) => annotation.kind === "text-box" || annotation.kind === "text-edit",
+  );
   const font = needsText ? await pdf.embedFont(StandardFonts.Helvetica) : null;
   const pages = pdf.getPages();
   const imageCache = new Map<string, PDFImage>();

@@ -8,7 +8,7 @@ import { toolDefinitions } from "@/lib/registry";
 export const metadata: Metadata = pageMetadata({
   title: "Private PDF and document tools in your browser",
   description:
-    "APOS is a private document workspace with 39 free PDF and Office tools — merge, split, compress, repair, optimise, OCR, convert PDF to Word or Excel, protect and sign documents, and draft text with AI. Files are processed on your device and never uploaded.",
+    "APOS is a private document workspace with PDF and Office tools — merge, split, compress, repair, optimise, OCR, convert PDF to Word or Excel, protect and sign documents, and draft text with AI. Core tools process on your device; AI features and optional server modes are clearly disclosed.",
   path: "/",
   absoluteTitle: true,
 });

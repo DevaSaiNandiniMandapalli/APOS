@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { SITE, absoluteUrl } from "@/lib/site";
+import { processingMode, type ToolProcessing } from "@/lib/registry";
 
 type Studio = { id: string; name: string; description: string };
-type Tool = { id: string; name: string; description: string; studioId: string; status: string };
+type Tool = { id: string; name: string; description: string; studioId: string; status: string; processing?: ToolProcessing };
 
 export type Faq = { question: string; answer: string };
 
@@ -54,7 +55,13 @@ function statusLabel(status: string): string {
 
 export function toolMetadata(tool: Tool, studio: Studio): Metadata {
   const title = `${tool.name} — free ${studio.name.replace(/ Studio$/, "")} tool`;
-  const description = `${tool.description} Runs privately in your browser${tool.status === "available" ? " and works today" : `; currently ${statusLabel(tool.status)}`}. No upload, no account, no APOS-added watermark.`;
+  const mode = processingMode(tool);
+  const privacy = mode === "ai"
+    ? "Files are read in your browser where applicable; only the text you choose to process is sent to the configured AI service. No account, no APOS-added watermark."
+    : mode === "server-optional"
+      ? "Browser mode runs privately on your device; the optional server mode uploads only when you select it. No account, no APOS-added watermark."
+      : "Runs privately in your browser. No upload, no account, no APOS-added watermark.";
+  const description = `${tool.description} ${privacy}${tool.status === "available" ? " Works today." : ` Currently ${statusLabel(tool.status)}.`}`;
   return pageMetadata({
     title,
     description: description.slice(0, 300),
@@ -65,9 +72,15 @@ export function toolMetadata(tool: Tool, studio: Studio): Metadata {
 
 export function studioMetadata(studio: Studio, tools: readonly Tool[]): Metadata {
   const ready = tools.filter((tool) => tool.status === "available").length;
+  const modes = new Set(tools.map((tool) => processingMode(tool)));
+  const privacy = modes.has("ai")
+    ? "Browser tools run locally; AI features disclose the extracted text they send."
+    : modes.has("server-optional")
+      ? "Browser tools run locally; optional server modes upload only when selected."
+      : "Each browser tool runs locally with no file upload.";
   return pageMetadata({
     title: `${studio.name} — ${ready} working tools`,
-    description: `${studio.description} ${ready} of ${tools.length} tools work today, each running locally in your browser with no file upload.`,
+    description: `${studio.description} ${ready} of ${tools.length} tools work today. ${privacy}`,
     path: `/studios/${studio.id}`,
     keywords: [studio.name, ...tools.slice(0, 6).map((tool) => tool.name), ...SITE.keywords.slice(0, 4)],
   });
@@ -88,9 +101,15 @@ export function toolFaqs(tool: Tool, studio: Studio): Faq[] {
     },
     {
       question: "Are my files uploaded to a server?",
-      answer: ready
-        ? `No. ${tool.name} processes the file inside your browser using local WebAssembly and worker threads, so the document never leaves your device. Only the optional AI writing features send text you explicitly submit.`
-        : "When a tool ships in APOS it runs on your own device. APOS does not upload documents for processing.",
+      answer: !ready
+        ? "APOS does not upload documents for browser-local processing. Unfinished tools are labelled rather than faked."
+        : processingMode(tool) === "ai"
+          ? tool.id === "ai-assistant"
+            ? "The text you enter is sent to the configured Sarvam 105B service. No file is uploaded, and the API key never reaches the browser."
+            : `The file is read inside your browser. Only the extracted text you choose to process is sent to the configured Sarvam 105B service; the full document is not uploaded, and the API key never reaches the browser.`
+          : processingMode(tool) === "server-optional"
+            ? `Browser mode processes the document on your device and never uploads it. If you explicitly select the optional server engine, the document is uploaded to the APOS processing server you configured.`
+            : `No. ${tool.name} processes the file inside your browser using local WebAssembly and worker threads, so the document never leaves your device.`,
     },
     {
       question: `Which file types does ${tool.name} accept?`,
@@ -158,6 +177,12 @@ export function websiteSchema() {
 
 export function toolSchema(tool: Tool, studio: Studio) {
   const ready = tool.status === "available";
+  const mode = processingMode(tool);
+  const privacyFeatures = mode === "ai"
+    ? ["File read locally", "Only extracted text is sent to the configured AI service", "No account required"]
+    : mode === "server-optional"
+      ? ["Browser-local by default", "Optional server mode is explicit and labelled", "No account required"]
+      : ["Runs locally in the browser", "No file upload for document processing", "No account required"];
   return {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -169,13 +194,13 @@ export function toolSchema(tool: Tool, studio: Studio) {
     description: tool.description,
     isAccessibleForFree: true,
     inLanguage: "en",
-    offers: { "@type": "Offer", price: "0", priceCurrency: "USD", availability: "https://schema.org/InStock" },
-    featureList: [
-      "Runs locally in the browser",
-      "No account required",
-      "No file upload for document processing",
-      "Works on desktop and mobile browsers",
-    ],
+    offers: {
+      "@type": "Offer",
+      price: "0",
+      priceCurrency: "USD",
+      availability: ready ? "https://schema.org/InStock" : "https://schema.org/PreOrder",
+    },
+    featureList: [ready ? "Available today" : statusLabel(tool.status), ...privacyFeatures, "Works on desktop and mobile browsers"],
     ...(ready
       ? {}
       : { additionalProperty: { "@type": "PropertyValue", name: "Availability", value: statusLabel(tool.status) } }),

@@ -133,13 +133,19 @@ def run_pdf_to_excel(files: list[UploadedFile], options: dict) -> ToolResult:
                     for table in tables:
                         for row in table:
                             for column, value in enumerate(row, start=1):
-                                sheet.cell(row=row_cursor, column=column,
-                                           value=value if value is not None else "")
+                                cell = sheet.cell(row=row_cursor, column=column)
+                                cell.value = "" if value is None else str(value)
+                                # PDF text is untrusted: never let a leading "=",
+                                # "+", "-" or "@" turn into a live spreadsheet
+                                # formula (CSV/formula injection).
+                                cell.data_type = "s"
                             row_cursor += 1
                         row_cursor += 1  # blank row between tables
                 else:
                     for line in (page.extract_text() or "").splitlines():
-                        sheet.cell(row=row_cursor, column=1, value=line)
+                        cell = sheet.cell(row=row_cursor, column=1)
+                        cell.value = line
+                        cell.data_type = "s"
                         row_cursor += 1
     except ToolError:
         raise

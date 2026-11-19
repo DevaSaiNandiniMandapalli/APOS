@@ -96,9 +96,16 @@ export async function unlockPdf(
   password: string,
   options: { signal?: AbortSignal; onProgress?: (page: number, total: number) => void } = {},
 ) {
+  const data = new Uint8Array(await file.arrayBuffer());
+  const textPreserving = await unlockPreservingText(data, password);
+  if (textPreserving) {
+    options.onProgress?.(textPreserving.pageCount, textPreserving.pageCount);
+    return { bytes: textPreserving.bytes, mode: "text" as const };
+  }
+
+  if (options.signal?.aborted) throw new DOMException("Unlock cancelled", "AbortError");
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-  const data = new Uint8Array(await file.arrayBuffer());
   const loading = pdfjs.getDocument({ data, password });
   let doc;
   try { doc = await loading.promise; }
@@ -124,7 +131,48 @@ export async function unlockPdf(
     await doc.cleanup();
     await loading.destroy();
   }
-  return new Uint8Array(await out.save({ useObjectStreams: true }));
+  return { bytes: new Uint8Array(await out.save({ useObjectStreams: true })), mode: "images" as const };
+}
+
+/**
+ * pdf-lib can decrypt an encrypted PDF when the password is supplied. Copying
+ * its pages into a fresh document removes the encryption dictionary while
+ * keeping the text, vectors and images intact. Document-level structures such
+ * as bookmarks, forms and attachments are not copied.
+ */
+async function unlockPreservingText(data: Uint8Array, password: string): Promise<{ bytes: Uint8Array; pageCount: number } | null> {
+  let source: PDFDocument;
+  try {
+    source = await PDFDocument.load(data, { password, updateMetadata: false });
+  } catch {
+    return null;
+  }
+  if (source.isEncrypted) return null;
+  const pageCount = source.getPageCount();
+  if (pageCount < 1 || pageCount > PDF_LIMITS.pages) return null;
+  const output = await PDFDocument.create();
+  const pages = await output.copyPages(source, source.getPageIndices());
+  pages.forEach((page) => output.addPage(page));
+  try {
+    const title = source.getTitle();
+    const author = source.getAuthor();
+    const subject = source.getSubject();
+    const keywords = source.getKeywords();
+    const creator = source.getCreator();
+    if (title) output.setTitle(title);
+    if (author) output.setAuthor(author);
+    if (subject) output.setSubject(subject);
+    if (keywords) output.setKeywords(keywords.split(/[,;]\s*/).filter(Boolean));
+    if (creator) output.setCreator(creator);
+  } catch { /* metadata is best-effort */ }
+  const bytes = new Uint8Array(await output.save({ useObjectStreams: true }));
+  try {
+    const verified = await PDFDocument.load(bytes, { updateMetadata: false });
+    if (verified.isEncrypted || verified.getPageCount() !== pageCount) return null;
+  } catch {
+    return null;
+  }
+  return { bytes, pageCount };
 }
 
 export function isPdfEncryptedError(reason: unknown) {

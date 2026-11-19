@@ -11,7 +11,7 @@ describe("tool registry", () => {
   it("validates the canonical registry and its tool references", () => {
     expect(registry.tools).toHaveLength(toolDefinitions.length);
     expect(registry.tools.every((tool) => studioDefinitions.some((studio) => studio.id === tool.studioId))).toBe(true);
-    const available = ["merge-pdf", "split-pdf", "rotate-pdf", "organize-pages", "delete-pdf-pages", "extract-pdf-pages", "duplicate-pdf-pages", "add-blank-pdf-pages", "compress-pdf", "repair-pdf", "optimize-pdf", "pdf-to-images", "pdf-to-text", "pdf-to-html", "images-to-pdf", "pdf-watermark", "pdf-page-numbers", "pdf-metadata", "protect-pdf", "spreadsheet-editor", "presentation-editor", "ai-assistant", "ocr-image", "workflow-builder", "file-inspector", "document-summary", "ocr-pdf", "pdf-to-office", "document-to-pdf", "spreadsheet-to-pdf", "presentation-to-pdf", "ai-document-agent", "universal-converter", "sign-pdf", "redact-pdf", "unlock-pdf", "document-editor", "edit-pdf", "image-converter"];
+    const available = ["merge-pdf", "split-pdf", "rotate-pdf", "organize-pages", "delete-pdf-pages", "extract-pdf-pages", "duplicate-pdf-pages", "add-blank-pdf-pages", "compress-pdf", "repair-pdf", "optimize-pdf", "pdf-to-images", "pdf-to-text", "pdf-to-html", "images-to-pdf", "pdf-watermark", "pdf-page-numbers", "pdf-metadata", "protect-pdf", "spreadsheet-editor", "presentation-editor", "ai-assistant", "ocr-image", "workflow-builder", "file-inspector", "document-passport", "document-summary", "ocr-pdf", "pdf-to-office", "document-to-pdf", "spreadsheet-to-pdf", "presentation-to-pdf", "ai-document-agent", "universal-converter", "sign-pdf", "redact-pdf", "unlock-pdf", "document-editor", "edit-pdf", "image-converter"];
     const developing: string[] = [];
     expect(toolDefinitions.filter((tool) => ![...available, ...developing].includes(tool.id)).every((tool) => tool.status === "planned")).toBe(true);
     expect(toolDefinitions.find((tool) => tool.id === "merge-pdf")?.status).toBe("available");
@@ -27,6 +27,14 @@ describe("tool registry", () => {
   it("rejects duplicate tool IDs and unavailable tools without a reason", () => {
     expect(() => validateRegistry(studioDefinitions, [toolDefinitions[0], toolDefinitions[0]])).toThrow("Tool IDs must be unique");
     expect(() => validateRegistry(studioDefinitions, [{ ...toolDefinitions[0], status: "unavailable", unavailableReason: undefined }])).toThrow();
+  });
+  it("records the processing model for tools that leave the browser", () => {
+    expect(toolDefinitions.find((tool) => tool.id === "merge-pdf")?.processing).toBeUndefined();
+    expect(toolDefinitions.find((tool) => tool.id === "ai-assistant")?.processing).toBe("ai");
+    expect(toolDefinitions.find((tool) => tool.id === "document-summary")?.processing).toBe("ai");
+    expect(toolDefinitions.find((tool) => tool.id === "ai-document-agent")?.processing).toBe("ai");
+    expect(toolDefinitions.find((tool) => tool.id === "document-to-pdf")?.processing).toBe("server-optional");
+    expect(toolDefinitions.find((tool) => tool.id === "pdf-to-office")?.processing).toBe("server-optional");
   });
   it("searches across names, descriptions, and studio names", () => {
     expect(searchTools("merge").map((tool) => tool.id)).toContain("merge-pdf");

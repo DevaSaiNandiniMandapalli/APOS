@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRight } from "lucide-react";
-import { studioDefinitions, toolDefinitions } from "@/lib/registry";
+import { studioDefinitions, toolDefinitions, processingMode } from "@/lib/registry";
 import { iconFor } from "@/lib/icons";
 import RouteHeader from "@/components/route-header";
 import Breadcrumbs from "@/components/breadcrumbs";
@@ -27,6 +27,12 @@ export default async function StudioPage({ params }: { params: Promise<{ studioI
   const tools = toolDefinitions.filter((tool) => tool.studioId === studio.id);
   const available = tools.filter((tool) => tool.status === "available").length;
   const others = studioDefinitions.filter((item) => item.id !== studio.id).slice(0, 4);
+  const studioModes = new Set(tools.map((tool) => processingMode(tool)));
+  const processingCopy = studioModes.has("ai")
+    ? "Browser-local tools stay on your device; AI tools disclose that only extracted text is sent to the configured AI service."
+    : studioModes.has("server-optional")
+      ? "Browser-local tools stay on your device; optional server modes upload only when you explicitly select them."
+      : "Each runs locally in your browser with no upload.";
 
   return <>
     <StructuredData data={[
@@ -50,8 +56,7 @@ export default async function StudioPage({ params }: { params: Promise<{ studioI
       <section className="answer-box" aria-labelledby="studio-answer">
         <h2 id="studio-answer">What this studio is for</h2>
         <p>
-          {studio.description} {available} of the {tools.length} tools here work today, each running locally in your
-          browser with no upload{available < tools.length ? "; the remaining tools are clearly marked as planned or in development" : ""}.
+          {studio.description} {available} of the {tools.length} tools here work today. {processingCopy}{available < tools.length ? " The remaining tools are clearly marked as planned or in development." : ""}
         </p>
       </section>
 

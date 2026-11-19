@@ -30,7 +30,7 @@ export function safeFileStem(filename: string) {
 export function assertImageWorkBounds(width: number, height: number, totalPixels: number) {
   const pixels = Math.ceil(width) * Math.ceil(height);
   if (!Number.isSafeInteger(pixels) || pixels <= 0 || pixels > PDF_IMAGE_LIMITS.pixelsPerPage) throw new PdfInputError("too-large", "A selected page exceeds the 12-megapixel rendering limit. Lower the output resolution.");
-  if (totalPixels + pixels > PDF_IMAGE_LIMITS.totalPixels) throw new PdfInputError("too-large", "The selected pages exceed the 30-megapixel total rendering limit. Export fewer pages or use a lower resolution.");
+  if (totalPixels + pixels > PDF_IMAGE_LIMITS.totalPixels) throw new PdfInputError("too-large", `The selected pages exceed the ${PDF_IMAGE_LIMITS.totalPixels / 1_000_000}-megapixel total rendering limit. Export fewer pages or use a lower resolution.`);
   return pixels;
 }
 

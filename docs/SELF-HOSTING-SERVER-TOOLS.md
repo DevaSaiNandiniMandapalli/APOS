@@ -2,7 +2,7 @@
 
 APOS has two processing modes:
 
-1. **Browser-local tools** — the 39 tools in the canonical studio registry. These never upload a document.
+1. **Browser-local tools** — the 40 tools in the canonical studio registry. These never upload a document.
 2. **Server tools** — the optional FastAPI service built from the supplied APOS/pdfsmith processing code. These tools run on your own server and are clearly labelled on `/server-tools`.
 
 The server is optional. Without it, the browser app and every browser-local tool continue to work; `/server-tools` explains how to connect one instead of exposing dead controls.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { PDFDocument } from "@cantoo/pdf-lib";
 import {
   INSPECTOR_LIMITS,
@@ -139,7 +140,8 @@ export default function FileInspector() {
       <h2 id="inspector-heading">Inspect a file on this device</h2>
       <p>Read the basic properties of any document, image or text file. The file is opened locally and never uploaded.</p>
       <div className="privacy-note">
-        Limit: {formatBytes(INSPECTOR_LIMITS.perFileBytes)} per file. The SHA-256 checksum is computed in this browser and can be used to confirm the file is unchanged.
+        Limit: {formatBytes(INSPECTOR_LIMITS.perFileBytes)} per file. The SHA-256 checksum is computed in this browser and can be used to confirm the file is unchanged. For metadata, hidden objects and share-readiness, open{" "}
+        <Link className="text-link" href="/tools/document-passport">Document Passport</Link>.
       </div>
       <label className="file-picker">
         Choose a file to inspect

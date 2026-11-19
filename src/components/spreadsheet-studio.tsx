@@ -147,7 +147,7 @@ export default function SpreadsheetStudio() {
         <table className="spreadsheet__grid">
           <thead>
             <tr>
-              <th className="spreadsheet__corner" scope="col" />
+              <th className="spreadsheet__corner" scope="col"><span className="sr-only">Row and column</span></th>
               {columns.map((label) => (
                 <th key={label} scope="col">{label}</th>
               ))}

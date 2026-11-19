@@ -1,6 +1,6 @@
 import { PDFDocument, StandardFonts } from "@cantoo/pdf-lib";
 import { describe, expect, it } from "vitest";
-import { SIGNATURE_PLACEMENTS, signPdf } from "./pdf-security-tools";
+import { SIGNATURE_PLACEMENTS, signPdf, unlockPdf } from "./pdf-security-tools";
 
 async function samplePdf() {
   const doc = await PDFDocument.create();
@@ -30,5 +30,21 @@ describe("signPdf", () => {
 
   it("rejects empty signature text", async () => {
     await expect(signPdf(await samplePdf(), { text: "   ", page: 1, placement: "center" })).rejects.toThrow(/sign with/i);
+  });
+});
+
+describe("unlockPdf", () => {
+  it("removes encryption while keeping a selectable text layer", async () => {
+    const pdf = await PDFDocument.create();
+    const font = await pdf.embedFont(StandardFonts.Helvetica);
+    pdf.addPage([400, 500]).drawText("KEEP THIS TEXT", { x: 30, y: 400, size: 16, font });
+    pdf.encrypt({ userPassword: "userpass123", ownerPassword: "ownerpass123", algorithm: "AES-256" });
+    const file = new File([new Uint8Array(await pdf.save()) as unknown as BlobPart], "locked.pdf", { type: "application/pdf" });
+    const result = await unlockPdf(file, "userpass123");
+    expect(result.mode).toBe("text");
+    const opened = await PDFDocument.load(result.bytes);
+    expect(opened.isEncrypted).toBe(false);
+    expect(opened.getPageCount()).toBe(1);
+    expect(result.bytes.byteLength).toBeGreaterThan(500);
   });
 });

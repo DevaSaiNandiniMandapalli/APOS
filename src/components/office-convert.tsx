@@ -34,9 +34,8 @@ export default function OfficeConvert({ mode }: { mode: OfficeMode }) {
         const available = Boolean(tool?.available);
         setServerAvailable(available);
         setServerUnreachable(false);
-        // The layout-preserving engine reproduces the document exactly, so it is
-        // the default whenever the processing server offers it.
-        if (available) setEngine("server");
+        // Privacy default: never upload a document unless the user explicitly
+        // switches to the server engine.
         setServerChecked(true);
       })
       .catch((reason) => {

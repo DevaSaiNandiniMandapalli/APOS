@@ -92,6 +92,28 @@ function textBoxAnnotation({
   } as PdfAnnotation;
 }
 
+function textEditAnnotation({
+  page = 1,
+  x = 0.2,
+  y = 0.4,
+  width = 0.3,
+  height = 0.08,
+  text = "Replacement text",
+}: Partial<{ page: number; x: number; y: number; width: number; height: number; text: string }> = {}): PdfAnnotation {
+  return {
+    id: 12,
+    page,
+    kind: "text-edit",
+    x,
+    y,
+    width,
+    height,
+    text,
+    fontSize: 0.03,
+    color: "#17365d",
+  } as PdfAnnotation;
+}
+
 function lineAnnotation({
   page = 1,
   start = { x: 0.1, y: 0.5 },
@@ -363,6 +385,18 @@ describe("PDF export round-trip", () => {
     const texts = await extractTexts(pdf);
     expect(texts.join(" ")).toContain("Original page 1 text");
     expect(texts.join(" ")).toContain("Original page 3 text");
+  });
+
+  it("exports a lone cover-and-replace text annotation", async () => {
+    const source = await makeSourcePdf({ withText: true });
+    const output = await exportAnnotatedPdf(source, [
+      textEditAnnotation({ text: "Corrected text" }),
+    ]);
+
+    const pdf = await exportedPages(output);
+    expect(pdf.getPageCount()).toBe(1);
+    const texts = await extractTexts(pdf);
+    expect(texts.join(" ")).toContain("Corrected text");
   });
 });
 

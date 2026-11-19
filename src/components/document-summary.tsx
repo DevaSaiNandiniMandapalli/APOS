@@ -88,12 +88,15 @@ export default function DocumentSummary() {
 
   const followUp = async () => {
     if (!doc || !question.trim()) return;
-    const { excerpt, truncated } = buildExcerpt(doc.text);
-    const problem = validateAiInput(`${question}\n\n${excerpt}`);
+    const questionPrefix = `Question: ${question}\n\nDocument:\n`;
+    const excerptLimit = Math.max(1, MAX_INPUT_CHARS - questionPrefix.length - 32);
+    const { excerpt, truncated } = buildExcerpt(doc.text, excerptLimit);
+    const prompt = `Question: ${question}\n\nDocument${truncated ? " (excerpt)" : ""}:\n${excerpt}`;
+    const problem = validateAiInput(prompt);
     if (problem) { setError(problem); return; }
     setError(""); setAnswer(""); setStatus("asking");
     try {
-      const result = await askAi("chat", `Question: ${question}\n\nDocument${truncated ? " (excerpt)" : ""}:\n${excerpt}`);
+      const result = await askAi("chat", prompt);
       setAnswer(result);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The question could not be answered.");

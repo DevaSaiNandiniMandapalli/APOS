@@ -181,9 +181,11 @@ export default function WorkflowBuilder() {
       </div>
 
       {errors.length ? (
-        <ul className="workflow__errors" role="status">
-          {errors.map((error) => <li key={error}>{error}</li>)}
-        </ul>
+        <div role="status">
+          <ul className="workflow__errors">
+            {errors.map((error) => <li key={error}>{error}</li>)}
+          </ul>
+        </div>
       ) : (
         <p className="workflow__valid" role="status">Ready — {workflow.steps.length} step{workflow.steps.length === 1 ? "" : "s"}.</p>
       )}

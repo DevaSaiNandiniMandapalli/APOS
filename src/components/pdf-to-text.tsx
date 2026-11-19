@@ -146,17 +146,24 @@ export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "tx
       await runBoundedQueue(ids, CONVERSION_LIMITS.concurrentFiles, async (id) => {
         const item = itemsRef.current.find((entry) => entry.id === id);
         if (!item || item.status !== "queued" || controller.signal.aborted) return;
-        const itemController = new AbortController();
-        controllersRef.current.set(id, itemController);
-        updateItems((existing) => existing.map((entry) => entry.id === id ? { ...entry, status: "processing", error: "", completedPages: 0, totalPages: 0 } : entry));
         const includeLabels = item.textSettings === "global" ? includePageLabels : item.textSettings === "include";
         const pages = item.pageSettings === "custom"
           ? item.pageRange
           : item.pageSettings === "all"
             ? ""
             : defaultPageMode === "custom" ? defaultPageRange : "";
-        if (item.pageSettings === "custom" && !item.pageRange.trim()) throw new Error("Enter a page range for this file, such as 1-3, 5.");
-        if (item.pageSettings === "global" && defaultPageMode === "custom" && !defaultPageRange.trim()) throw new Error("Enter a default page range or switch the batch default to all pages.");
+        const rangeError = item.pageSettings === "custom" && !item.pageRange.trim()
+          ? "Enter a page range for this file, such as 1-3, 5."
+          : item.pageSettings === "global" && defaultPageMode === "custom" && !defaultPageRange.trim()
+            ? "Enter a default page range or switch the batch default to all pages."
+            : "";
+        if (rangeError) {
+          updateItems((existing) => existing.map((entry) => entry.id === id ? { ...entry, status: "failed", error: rangeError } : entry));
+          return;
+        }
+        const itemController = new AbortController();
+        controllersRef.current.set(id, itemController);
+        updateItems((existing) => existing.map((entry) => entry.id === id ? { ...entry, status: "processing", error: "", completedPages: 0, totalPages: 0 } : entry));
         let convertedBytes: Uint8Array | null = null;
         try {
           const result: ConversionResult = await converter.convert(item.file, {

@@ -296,6 +296,8 @@ function DocumentEditorPane({ onChange }: { onChange: (document: Document) => vo
         contentEditable={
           <ContentEditable
             className="document-editor__pane"
+            ariaLabel="Document body"
+            ariaMultiline
             style={{
               minHeight: "55vh",
               outline: "none",
