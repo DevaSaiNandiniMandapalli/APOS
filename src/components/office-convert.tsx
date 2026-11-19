@@ -21,6 +21,7 @@ export default function OfficeConvert({ mode }: { mode: OfficeMode }) {
   const [engine, setEngine] = useState<"browser" | "server">("browser");
   const [serverAvailable, setServerAvailable] = useState(false);
   const [serverChecked, setServerChecked] = useState(false);
+  const [serverUnreachable, setServerUnreachable] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const urlRef = useRef<string | null>(null);
 
@@ -32,13 +33,18 @@ export default function OfficeConvert({ mode }: { mode: OfficeMode }) {
         const tool = registry.tools.find((candidate) => candidate.name === "office_to_pdf");
         const available = Boolean(tool?.available);
         setServerAvailable(available);
+        setServerUnreachable(false);
         // The layout-preserving engine reproduces the document exactly, so it is
         // the default whenever the processing server offers it.
         if (available) setEngine("server");
         setServerChecked(true);
       })
-      .catch(() => {
+      .catch((reason) => {
+        if (controller.signal.aborted) return;
         setServerAvailable(false);
+        // A network failure usually means a sleeping free-tier host, not a
+        // missing configuration.
+        setServerUnreachable(reason instanceof Error && !/not configured/i.test(reason.message));
         setServerChecked(true);
       });
     return () => controller.abort();
@@ -135,8 +141,13 @@ export default function OfficeConvert({ mode }: { mode: OfficeMode }) {
                 {serverAvailable && <option value="server">Layout-preserving server — keeps fonts, colours and layout</option>}
               </select>
             </label>
-            {!serverChecked && <span className="route-note">Checking the optional processing server…</span>}
-            {serverChecked && !serverAvailable && (
+            {!serverChecked && <span className="route-note">Checking the optional processing server… a sleeping free-tier host can take up to a minute to wake.</span>}
+            {serverChecked && !serverAvailable && serverUnreachable && (
+              <span className="route-note">
+                The processing server could not be reached. It may be waking up — reload in a minute. Browser mode works now and never uploads.
+              </span>
+            )}
+            {serverChecked && !serverAvailable && !serverUnreachable && (
               <span className="route-note">
                 The layout-preserving engine is not configured. Browser mode reflows the text and does not reproduce the original layout.
               </span>
