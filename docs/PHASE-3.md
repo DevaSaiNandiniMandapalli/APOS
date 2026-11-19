@@ -92,7 +92,7 @@ This is still a **reflow**, not a layout engine: columns, floating shapes, table
 
 ## Limits
 
-- **PDF to Office:** 25 MB input; 500 pages; DOCX/XLSX output cap 30 MB; visual Word mode is limited to 100 pages per run; OCR is limited to 20 pages per run and uses English Tesseract. Editable Word keeps content pictures anchored at their original PDF page coordinates and preserves source page sizes; text can still reflow when edited. Exact layout mode embeds each page as a picture and is not editable. Image-only pages either fail with their page numbers or are OCR'd when the user enables OCR. Full-page backgrounds are skipped and reported. Complex multi-column layouts, forms, annotations, exact fonts, vertical merges and inline text-box reconstruction are not guaranteed. XLSX cell values are text, not formulas. Table detection is heuristic and is reported as such.
+- **PDF to Office:** 25 MB input; 500 pages; DOCX/XLSX output cap 30 MB; visual Word mode is limited to 100 pages per run; OCR is limited to 20 pages per run and uses English Tesseract. Browser-local Editable Word keeps content pictures anchored at their original PDF page coordinates and preserves source page sizes; text can still reflow when edited. The optional server exact-layout mode keeps text lines and pictures at their PDF positions and preserves vector artwork as a background layer; text remains editable line by line. Picture pages embeds each page as a picture and is not editable. Image-only pages either fail with their page numbers or are OCR'd when the user enables OCR. Full-page backgrounds are skipped in browser editable mode and reported. Complex multi-column layouts, forms, annotations, exact fonts, vertical merges and inline text-box reconstruction are not guaranteed. XLSX cell values are text, not formulas. Table detection is heuristic and is reported as such.
 - **PDF to Images:** 50 MB input, 500 PDF pages, 500 output pages per run, 12 megapixels per page, 200 megapixels total, 50 MB combined output. 300 DPI on large pages can exceed the per-page or total limits; the tool reports this rather than truncating.
 - **PDF to Text:** 20 files per batch, 25 MB per file, 100 MB per batch, 500 pages per PDF, 20 MB text output. Only selectable text is extracted. Scanned pages require local OCR first; OCR is not silently substituted.
 - **PDF to HTML:** 20 files per batch, 25 MB per file, 500 pages per PDF. Reading order follows the encoded PDF content stream. Layout mode is approximate and does not reproduce fonts exactly. The standalone HTML embeds pictures as data URLs; the ZIP package uses `assets/` files.
@@ -120,7 +120,7 @@ Results from the PDF-to-Word fix verification:
 - `npm.cmd run build` - passed; 65 static routes generated, including `/server-tools`.
 - Focused PDF/Office Playwright run - 29 passed.
 - Full Playwright suite `npx playwright test --workers=2` - 173 passed, 2 skipped (the real FastAPI integration tests require `APOS_LIVE_BACKEND=1`). The skipped tests passed separately against the live local backend.
-- `backend/.venv/Scripts/python.exe -m pytest backend/tests -q` - 18 passed, including on pypdf 7.0.1.
+- `backend/.venv/Scripts/python.exe -m pytest backend/tests -q` - 20 passed, including on pypdf 7.0.1.
 - `npx wrangler deploy --dry-run` - passed; the Worker and static assets bundle without errors.
 
 The regression fixture was downloaded through the real PDF-to-Office UI and reopened with Python `python-docx`. All five `PAGE_MARKER_1`–`PAGE_MARKER_5` markers appeared exactly once and in order; the DOCX contained one 180 × 120 pt content image on page 3, no page-sized screenshots, four page breaks, a real Word table in the table fixture, and editable identity-transform page 4 text. The Universal Converter produced the same result. A hybrid PDF with image-only pages 3–5 stopped with those page numbers and no download. With OCR enabled, the image-only page produced editable text and no page media. These Python packages are external verifiers and are not project dependencies.
@@ -140,6 +140,10 @@ A separate, optional FastAPI service now lives under `backend/`. It vendors the 
 The main PDF to Office tool has two Word engines:
 
 - **Browser-local editable Word** — default, no upload, structured reconstruction with OCR support.
-- **Layout-preserving server Word** — only appears when the configured APOS server reports `pdf_to_word` available. It uses `pdf2docx`, supports page ranges, optional OCR (OCRmyPDF/Tesseract), preserves richer layout/tables/images and is explicitly labelled as server processing. The browser is not used as a silent upload path; the user chooses the engine.
+- **Exact page layout server Word** — only appears when the configured APOS server reports `pdf_to_word` available. It supports page ranges, optional OCR (OCRmyPDF/Tesseract), and two server layouts:
+  - **Exact page layout** — every page keeps its source size; each text line is written as a Word frame at its PDF baseline, pictures are anchored at their source bounding boxes, and remaining vector artwork (charts, rules, logos, highlights) is kept as a transparent background layer. Text stays editable line by line.
+  - **Flowing document** — reflows paragraphs and tables with `pdf2docx` for easier editing.
 
-The server DOCX is downloaded as a real Office package and validated on the client (ZIP structure, document body, related parts and image formats) before a link is shown.
+The browser is not used as a silent upload path; the user chooses the server engine. The server DOCX is downloaded as a real Office package and validated on the client (ZIP structure, document body, related parts and image formats) before a link is shown.
+
+Exact page layout is a reconstruction, not a pixel-perfect print engine. Rotated pages are preserved as a single page image, invisible OCR text is not duplicated, and annotations, form widgets, hyperlinks and unusual glyph runs are not reconstructed. Editing one text line does not reflow the rest of the page.

@@ -60,6 +60,63 @@ def test_pdf_to_word_honours_a_page_range() -> None:
     assert "alex@example.com" not in text
 
 
+def picture_pdf() -> bytes:
+    from PIL import Image
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas
+
+    image = Image.new("RGB", (80, 50), (220, 40, 40))
+    image_buffer = io.BytesIO()
+    image.save(image_buffer, format="PNG")
+    image_buffer.seek(0)
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=(400, 500))
+    pdf.setFont("Helvetica", 12)
+    pdf.drawString(50, 400, "Anchored text")
+    pdf.drawImage(ImageReader(image_buffer), 200, 100, width=80, height=50)
+    pdf.save()
+    return buffer.getvalue()
+
+
+def test_pdf_to_word_exact_layout_keeps_picture_coordinates() -> None:
+    response = post(
+        "pdf_to_word",
+        [("files", ("layout.pdf", picture_pdf(), "application/pdf"))],
+        {"mode": "layout"},
+    )
+    assert response.status_code == 200, response.text
+    archive = zipfile.ZipFile(io.BytesIO(response.content))
+    document = archive.read("word/document.xml").decode("utf-8")
+
+    assert '<w:pgSz w:w="8000" w:h="10000"/>' in document
+    assert "<w:framePr" in document
+    assert 'w:x="1000"' in document
+    assert 'w:hAnchor="page"' in document
+    assert 'w:vAnchor="page"' in document
+    assert "<wp:anchor" in document
+    assert 'relativeFrom="page"' in document
+    # The picture sits at PDF x=200, y=100 with a 80x50 point box. PyMuPDF
+    # reports it from the top edge, so y=350 in display coordinates.
+    assert f"<wp:posOffset>{200 * 12700}</wp:posOffset>" in document
+    assert f"<wp:posOffset>{350 * 12700}</wp:posOffset>" in document
+    assert f'cx="{80 * 12700}" cy="{50 * 12700}"' in document
+    assert any(name.startswith("word/media/") for name in archive.namelist())
+
+
+def test_pdf_to_word_flowing_mode_still_produces_editable_paragraphs() -> None:
+    response = post(
+        "pdf_to_word",
+        [("files", ("text.pdf", text_pdf(), "application/pdf"))],
+        {"mode": "flow"},
+    )
+    assert response.status_code == 200, response.text
+    import docx
+
+    document = docx.Document(io.BytesIO(response.content))
+    assert any("alex@example.com" in paragraph.text for paragraph in document.paragraphs)
+
+
 def test_pdf_to_excel_and_powerpoint_open_with_their_libraries() -> None:
     excel = post("pdf_to_excel", [("files", ("text.pdf", text_pdf(), "application/pdf"))])
     assert excel.status_code == 200, excel.text

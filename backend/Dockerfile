@@ -18,6 +18,9 @@ RUN apt-get update \
         libffi8 \
         shared-mime-info \
         fonts-dejavu-core \
+        fonts-liberation \
+        fonts-crosextra-carlito \
+        fonts-crosextra-caladea \
         curl \
     && rm -rf /var/lib/apt/lists/*
 

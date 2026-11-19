@@ -39,6 +39,7 @@ export default function PdfToOffice() {
   const [serverChecked, setServerChecked] = useState(false);
   const [serverOcr, setServerOcr] = useState(false);
   const [serverLanguage, setServerLanguage] = useState("eng");
+  const [serverMode, setServerMode] = useState<"layout" | "flow">("layout");
   const [pageMode, setPageMode] = useState<"all" | "custom">("all");
   const [pageRange, setPageRange] = useState("");
   const [includeTables, setIncludeTables] = useState(true);
@@ -172,6 +173,7 @@ export default function PdfToOffice() {
           pages,
           ocr: serverOcr,
           language: serverLanguage,
+          mode: serverMode,
         }, controller.signal);
         if (controller.signal.aborted || !mountedRef.current) return;
         const blobUrl = URL.createObjectURL(output.blob);
@@ -181,7 +183,9 @@ export default function PdfToOffice() {
           bytes: new Uint8Array(0),
           fileName,
           mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          detail: `Layout-preserving Word document generated on your APOS processing server${serverOcr ? " with OCR" : ""}. Complex layouts, unusual fonts and merged cells may still need review.`,
+          detail: serverMode === "layout"
+            ? `Exact-layout Word document generated on your APOS processing server${serverOcr ? " with OCR" : ""}. Text stays editable and pictures keep their source page positions.`
+            : `Flowing Word document generated on your APOS processing server${serverOcr ? " with OCR" : ""}. Text reflows normally; complex layouts may need review.`,
           stats: {
             pages: analysis?.pageCount ?? 0,
             textPages: 0,
@@ -194,7 +198,12 @@ export default function PdfToOffice() {
             pictures: 0,
             skippedFullPageImages: 0,
             unplacedImages: 0,
-            warnings: ["This document was processed on the self-hosted APOS server, not in this browser.", "Layout-preserving conversion is an approximation; review the result before publishing."],
+            warnings: [
+              "This document was processed on the self-hosted APOS server, not in this browser.",
+              serverMode === "layout"
+                ? "Exact layout keeps text and pictures at their PDF positions. Text is editable line by line; editing one line does not reflow the rest. Charts, rules and other vector artwork are preserved as a background layer."
+                : "Flowing Word rebuilds normal paragraphs and tables. Pictures and complex layouts may move during reflow.",
+            ],
           },
           url: blobUrl,
         });
@@ -254,6 +263,7 @@ export default function PdfToOffice() {
     setPageRange("");
     setOcrScannedPages(false);
     setServerOcr(false);
+    setServerMode("layout");
     setEngine("browser");
     if (inputRef.current) inputRef.current.value = "";
   };
@@ -304,9 +314,9 @@ export default function PdfToOffice() {
 
   return <section className="office-convert" aria-labelledby="pdf-office-heading">
     <h2 id="pdf-office-heading">Convert a PDF to editable Word or Excel</h2>
-    <p>Editable Word rebuilds selectable text, headings, paragraphs, detected tables and content pictures. The optional layout-preserving engine uses the self-hosted APOS processing server for closer Word fidelity. Visual Word places each PDF page in the document as a picture and is not editable.</p>
+    <p>Editable Word rebuilds selectable text and tables. For the closest match to the source PDF, choose the optional exact-layout server engine: text stays editable and pictures keep their original page positions. Picture pages embeds each PDF page as a picture when you do not need editing.</p>
     <div className="privacy-note">{format === "docx" && mode === "editable" && engine === "server"
-      ? "Layout-preserving mode uploads this PDF to the configured APOS processing server. That server handles the file in memory or a temporary directory, uses no database, and does not keep it permanently. Browser-local mode remains available and never uploads."
+      ? "Server layout mode uploads this PDF to the configured APOS processing server. That server handles the file in memory or a temporary directory, uses no database, and does not keep it permanently. Browser-local mode remains available and never uploads."
       : "The PDF is read in this browser. Nothing is uploaded. The converter accepts PDFs up to 25 MB and 500 pages. Image-only pages are detected individually: enable OCR to convert them to editable text, or use Visual Word for an image-based copy."}</div>
 
     <label className="file-picker">Choose a file
@@ -364,15 +374,15 @@ export default function PdfToOffice() {
         </label>
         {format === "docx" && <label>Word mode
           <select value={mode} disabled={busy} onChange={(event) => setMode(event.target.value as PdfOfficeMode)}>
-            <option value="editable">Editable Word — text and tables, pictures kept at source positions</option>
-            <option value="visual">Exact layout — every page as a picture (not editable)</option>
+            <option value="editable">Editable Word - reflowing text, pictures anchored in place</option>
+            <option value="visual">Picture pages - every page as a picture (not editable)</option>
           </select>
         </label>}
-        {format === "docx" && mode === "editable" && <p className="route-note">Pictures are anchored at their original page coordinates. Text may reflow when edited. For a page-for-page visual match, choose Exact layout.</p>}
+        {format === "docx" && mode === "editable" && <p className="route-note">Browser-local Editable Word reflows text into normal paragraphs and anchors pictures at their original page coordinates. For text and pictures that both keep their PDF positions, select the exact-layout server engine below.</p>}
         {format === "docx" && mode === "editable" && <label>Word engine
           <select aria-label="Word engine" value={engine} disabled={busy} onChange={(event) => setEngine(event.target.value as "browser" | "server")}>
-            <option value="browser">Browser-local — private, structured reconstruction</option>
-            {serverTool && <option value="server">Layout-preserving server — higher Word fidelity</option>}
+            <option value="browser">Browser-local - private, reflowing document</option>
+            {serverTool && <option value="server">Exact page layout server - text and pictures stay in place</option>}
           </select>
           {!serverChecked && <span className="route-note">Checking the optional processing server…</span>}
           {serverChecked && !serverTool && <span className="route-note">The layout-preserving engine is not configured or unavailable. <Link className="text-link" href="/server-tools">Check server tools</Link>.</span>}
@@ -407,7 +417,15 @@ export default function PdfToOffice() {
               <option value="spa">Spanish</option>
             </select>
           </label>}
-          <p className="route-note">The server uses a layout-reconstruction engine. It generally preserves columns, tables and styling better than browser text extraction, but pictures and complex layouts may still be repositioned. For a pixel-identical page appearance, choose Exact layout.</p>
+          <label>Server layout
+            <select aria-label="Server layout" value={serverMode} disabled={busy} onChange={(event) => setServerMode(event.target.value as "layout" | "flow")}>
+              <option value="layout">Exact page layout - text and pictures keep their PDF positions</option>
+              <option value="flow">Flowing document - normal reflowing paragraphs and tables</option>
+            </select>
+          </label>
+          <p className="route-note">{serverMode === "layout"
+            ? "Each page keeps its source size. Text lines are placed at their PDF baselines, pictures at their source boxes, and charts, rules and logos are kept as a background layer. Text stays editable, but editing one line does not reflow the rest."
+            : "The server rebuilds flowing paragraphs and tables. This is easier to edit, but pictures and complex layouts may move during reflow."}</p>
         </>}
         {format === "xlsx" && <p className="route-note">Each detected table becomes a worksheet; an extracted-text worksheet is always included. Cell values are written as text, not formulas.</p>}
         <label>Output filename

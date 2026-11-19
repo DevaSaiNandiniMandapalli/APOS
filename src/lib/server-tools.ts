@@ -118,12 +118,13 @@ export async function inspectServerFormFields(bytes: ArrayBuffer, filename: stri
 
 export async function runServerPdfToWord(
   file: File,
-  options: { pages?: string; ocr?: boolean; language?: string },
+  options: { pages?: string; ocr?: boolean; language?: string; mode?: "layout" | "flow" },
   signal?: AbortSignal,
 ) {
   const form = new FormData();
   form.append("files", file, file.name);
   if (options.pages?.trim()) form.append("pages", options.pages.trim());
+  form.append("mode", options.mode === "flow" ? "flow" : "layout");
   form.append("ocr", options.ocr ? "true" : "false");
   if (options.language) form.append("language", options.language);
   const output = await runServerTool("pdf_to_word", form, signal);

@@ -12,9 +12,9 @@ The server is optional. Without it, the browser app and every browser-local tool
 The complete processing package under `backend/apos_processing` provides 32 tools, including:
 
 - Crop PDF, page removal, merge/split/organize/rotate
-- PDF to Word (layout-preserving `pdf2docx`, page ranges, optional OCR), PDF to Excel, PDF to PowerPoint
+- PDF to Word (exact page layout with editable text, anchored pictures and vector artwork; or reflowing `pdf2docx` mode; page ranges, optional OCR), PDF to Excel, PDF to PowerPoint
 
-The main `/tools/pdf-to-office` page uses this server Word engine when the user explicitly selects **Layout-preserving server**; its default remains browser-local.
+The main `/tools/pdf-to-office` page uses this server Word engine when the user explicitly selects **Exact page layout server**; its default remains browser-local. The server offers **Exact page layout** (text frames at PDF baselines, pictures at source boxes, vector layer preserved) and **Flowing document** (normal reflowing paragraphs and tables).
 - Images/Office/HTML to PDF
 - PDF/A conversion
 - Compress via Ghostscript, watermark and page numbers
@@ -220,4 +220,4 @@ npm.cmd run build
 npx playwright test e2e/server-tools.spec.ts --workers=1
 ```
 
-The backend suite (18 tests) covers registry/availability, real PDF merge output, signature rejection, workflow execution, form-field inspection, PDF-to-Word (including page ranges), PDF-to-Excel/PowerPoint, PDF-to-images, crop, compare, automatic redaction and self-signed PAdES signing/verification. The Playwright suite covers the unavailable-server state, a mocked complete upload/download flow, a mocked layout-preserving Word flow and (with `APOS_LIVE_BACKEND=1`) real FastAPI merge and PDF-to-Word conversions through the pages.
+The backend suite (20 tests) covers registry/availability, real PDF merge output, signature rejection, workflow execution, form-field inspection, PDF-to-Word exact layout (page size, text-frame coordinates, anchored picture offsets, media parts), PDF-to-Word flowing mode and page ranges, PDF-to-Excel/PowerPoint, PDF-to-images, crop, compare, automatic redaction and self-signed PAdES signing/verification. The Playwright suite covers the unavailable-server state, a mocked complete upload/download flow, a mocked layout-preserving Word flow and (with `APOS_LIVE_BACKEND=1`) real FastAPI merge and PDF-to-Word conversions through the pages.

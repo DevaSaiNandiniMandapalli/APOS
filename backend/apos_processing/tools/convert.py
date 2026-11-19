@@ -84,11 +84,11 @@ def run_pdf_to_images(files: list[UploadedFile], options: dict) -> ToolResult:
 
 def run_pdf_to_word(files: list[UploadedFile], options: dict) -> ToolResult:
     (uploaded,) = files
-    from pdf2docx import Converter  # heavy import (opencv); keep it lazy
 
     pages_spec = str(options.get("pages", "")).strip()
     reader = read_pdf(uploaded.data)
     page_indexes = parse_page_ranges(pages_spec, len(reader.pages)) if pages_spec else None
+    mode = str(options.get("mode", "layout")).strip().lower()
 
     ocr_requested = str(options.get("ocr", "")).lower() in ("true", "on", "1", "yes")
     source_data = uploaded.data
@@ -110,9 +110,24 @@ def run_pdf_to_word(files: list[UploadedFile], options: dict) -> ToolResult:
             source_data = target.read_bytes()
 
     with tempfile.TemporaryDirectory() as tmp:
+        if mode == "layout":
+            from apos_processing.tools.pdf_layout_docx import convert_pdf_to_layout_docx
+
+            try:
+                data, _stats = convert_pdf_to_layout_docx(
+                    source_data,
+                    page_indexes=page_indexes,
+                    title=safe_stem(uploaded.name),
+                )
+            except ValueError as exc:
+                raise ToolError(str(exc)) from exc
+            return ToolResult(f"{safe_stem(uploaded.name)}.docx", data, DOCX_TYPE)
+
         source = Path(tmp) / "in.pdf"
         target = Path(tmp) / "out.docx"
         source.write_bytes(source_data)
+        from pdf2docx import Converter  # heavy import (opencv); only for flowing mode
+
         converter = None
         try:
             converter = Converter(str(source))
@@ -240,13 +255,16 @@ register(Tool(
     run=run_pdf_to_word,
     options=(
         Option("pages", "Pages", help="e.g. 1-3,5 — blank converts every page"),
+        Option("mode", "Word layout", kind="select", default="layout",
+               choices=(("layout", "Exact page layout — text stays editable, pictures keep their place"),
+                        ("flow", "Flowing document — reflowed text and tables (pdf2docx)"))),
         Option("ocr", "OCR scanned pages first", kind="checkbox", default=False,
                help="needs OCRmyPDF + Tesseract on the server"),
         Option("language", "OCR language", default="eng",
                help="Tesseract language code, e.g. eng, hin, deu"),
     ),
-    available=lambda: importlib.util.find_spec("pdf2docx") is not None,
-    unavailable_hint="install the pdf2docx package on the server",
+    available=lambda: importlib.util.find_spec("pymupdf") is not None,
+    unavailable_hint="install PyMuPDF on the server",
     category="convert",
 ))
 
