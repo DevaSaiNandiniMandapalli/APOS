@@ -242,6 +242,59 @@ export async function buildRichDocPdf(blocks: RichDocBlock[], title: string): Pr
   };
 
   for (const block of blocks) {
+    if (block.kind === "table") {
+      const columns = Math.max(1, block.columnCount);
+      const usable = maxWidth;
+      const weights = Array.from({ length: columns }, (_, index) => {
+        const longest = block.rows.reduce((max, row) => Math.max(max, (row[index]?.text ?? "").length), 1);
+        return Math.min(60, Math.max(6, longest));
+      });
+      const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
+      const widths = weights.map((value) => (value / totalWeight) * usable);
+      const cellSize = 8.5;
+      const padding = 4;
+      const lineHeight = cellSize * 1.35;
+
+      for (const row of block.rows) {
+        const wrapped = row.map((cell, index) => wrapText(toPdfSafeText(cell?.text ?? ""), regular, cellSize, Math.max(10, widths[index] - padding * 2)));
+        const lines = Math.max(1, ...wrapped.map((entry) => entry.length));
+        const rowHeight = lines * lineHeight + padding * 2;
+        if (y - rowHeight < margin) newPage();
+
+        let x = margin;
+        for (let index = 0; index < columns; index += 1) {
+          const cell = row[index];
+          const fill = cell?.fill ? hexToRgb(cell.fill) : null;
+          if (fill) {
+            page.drawRectangle({ x, y: y - rowHeight, width: widths[index], height: rowHeight, color: rgb(fill[0], fill[1], fill[2]) });
+          }
+          page.drawRectangle({
+            x,
+            y: y - rowHeight,
+            width: widths[index],
+            height: rowHeight,
+            borderColor: rgb(0.72, 0.74, 0.79),
+            borderWidth: 0.5,
+          });
+          const font = cell?.bold ? boldFont : regular;
+          const [red, green, blue] = hexToRgb(cell?.color);
+          wrapped[index].forEach((line, lineIndex) => {
+            page.drawText(line, {
+              x: x + padding,
+              y: y - padding - cellSize - lineIndex * lineHeight,
+              size: cellSize,
+              font,
+              color: rgb(red, green, blue),
+            });
+          });
+          x += widths[index];
+        }
+        y -= rowHeight;
+      }
+      y -= 8;
+      continue;
+    }
+
     if (block.kind === "image") {
       let image;
       try {
@@ -286,6 +339,11 @@ export async function buildRichDocPdf(blocks: RichDocBlock[], title: string): Pr
     let lineWidth = 0;
     const flush = () => {
       if (!line.length) return;
+      // Paragraph shading (code blocks, callouts) is drawn behind the text.
+      if (block.fill) {
+        const [red, green, blue] = hexToRgb(block.fill);
+        page.drawRectangle({ x: margin, y: y - lineHeight + lineSize * 0.25, width: maxWidth, height: lineHeight, color: rgb(red, green, blue) });
+      }
       const offset = block.align === "center" ? (usable - lineWidth) / 2 : block.align === "right" ? usable - lineWidth : 0;
       let x = startX + Math.max(0, offset);
       // Merge neighbouring words that share formatting so the PDF text layer

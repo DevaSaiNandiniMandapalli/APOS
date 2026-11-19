@@ -71,11 +71,11 @@ Three further defects were fixed after inspecting a real resume:
 
 The browser engine used to flatten every document to Helvetica 11pt in one colour, and it replaced `•` with `-`. It now reads the DOCX properly:
 
-- `readDocxRichBlocks` parses each `<w:r>` run's `<w:rPr>` for bold, italic, `<w:sz>` (half-points) and `<w:color>`, plus paragraph `<w:pStyle>` heading level, `<w:jc>` alignment and `<w:numPr>` bullets.
-- `buildRichDocPdf` renders those runs with the matching Helvetica face, the source size and the source colour, centres or right-aligns the line, and draws a real `•` bullet.
+- `readDocxRichBlocks` parses each `<w:r>` run's `<w:rPr>` for bold, italic, `<w:sz>` (half-points) and `<w:color>`, plus paragraph `<w:pStyle>` heading level, `<w:jc>` alignment, `<w:numPr>` bullets and `<w:shd>` paragraph shading. Tables are extracted before the paragraph split so their structure survives, and each `<w:tc>` keeps its `<w:shd>` fill and run formatting.
+- `buildRichDocPdf` renders those runs with the matching Helvetica face, the source size and the source colour, centres or right-aligns the line, draws a real `•` bullet, paints paragraph shading behind code blocks and callouts, and draws tables as a real grid with cell fills, borders and wrapped cell text.
 - Neighbouring words that share formatting are merged into one text operation, so the PDF text layer keeps whole phrases instead of one word per draw call.
 
-Verified on a 22-page Word document: the cover title renders at 18pt in `#ED7D31`, the main heading at 30pt in `#17365D`, the subtitle at 13pt in `#464646`, body text at 9.5pt, and the `•` separators survive.
+Verified on a 22-page Word document: the cover title renders at 18pt in `#ED7D31`, the main heading at 30pt in `#17365D`, the subtitle at 13pt in `#464646`, body text at 9.5pt, the `•` separators survive, and the document's tables render with their dark header fills and cell borders instead of collapsing into plain lines.
 
 This is still a **reflow**, not a layout engine: columns, floating shapes, table fills and exact page breaks are not reproduced. For a page-for-page match the optional server engine (`office_to_pdf`, LibreOffice) is required, and the Word to PDF page offers it as a separate engine when the processing server reports it available.
 

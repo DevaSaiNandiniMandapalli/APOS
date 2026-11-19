@@ -248,6 +248,8 @@ export function readDocxBlocks(bytes: Uint8Array): DocBlock[] {
 /** A formatted run inside a Word paragraph. */
 export type DocRun = { text: string; bold?: boolean; italic?: boolean; size?: number; color?: string };
 
+export type RichTableCell = { text: string; fill?: string; bold?: boolean; color?: string };
+
 export type RichDocBlock =
   | {
       kind: "text";
@@ -257,7 +259,9 @@ export type RichDocBlock =
       level?: 1 | 2 | 3;
       bullet?: boolean;
       spaceBefore?: number;
+      fill?: string;
     }
+  | { kind: "table"; rows: RichTableCell[][]; columnCount: number }
   | { kind: "image"; bytes: Uint8Array; format: "png" | "jpeg"; width: number; height: number };
 
 function parseRunProperties(rPr: string): Omit<DocRun, "text"> {
@@ -282,12 +286,55 @@ function parseParagraphProperties(pPr: string) {
     jc === "center" ? "center" : jc === "right" || jc === "end" ? "right" : undefined;
   const bullet = /<w:numPr>/.test(pPr);
   const spacing = /<w:spacing[^>]*w:before="(\d+)"/.exec(pPr)?.[1];
-  return { level, align, bullet, spaceBefore: spacing ? Math.min(24, Number(spacing) / 20) : undefined };
+  const fill = /<w:shd[^>]*w:fill="([0-9A-Fa-f]{6})"/.exec(pPr)?.[1];
+  return {
+    level,
+    align,
+    bullet,
+    spaceBefore: spacing ? Math.min(24, Number(spacing) / 20) : undefined,
+    fill: fill && fill.toUpperCase() !== "FFFFFF" && fill.toUpperCase() !== "AUTO" ? fill.toUpperCase() : undefined,
+  };
+}
+
+function cellText(cellXml: string): string {
+  return decodeXml(
+    cellXml
+      .replace(/<w:tab\b[^>]*\/>/g, "\t")
+      .replace(/<w:br\b[^>]*\/>/g, " ")
+      .replace(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g, "$1")
+      .replace(/<[^>]+>/g, " "),
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseTable(tableXml: string): { rows: RichTableCell[][]; columnCount: number } | null {
+  const rows: RichTableCell[][] = [];
+  for (const rowMatch of tableXml.matchAll(/<w:tr\b[^>]*>([\s\S]*?)<\/w:tr>/g)) {
+    const cells: RichTableCell[] = [];
+    for (const cellMatch of rowMatch[1].matchAll(/<w:tc\b[^>]*>([\s\S]*?)<\/w:tc>/g)) {
+      const body = cellMatch[1];
+      const tcPr = /<w:tcPr>([\s\S]*?)<\/w:tcPr>/.exec(body)?.[1] ?? "";
+      const fill = /<w:shd[^>]*w:fill="([0-9A-Fa-f]{6})"/.exec(tcPr)?.[1];
+      const rPr = /<w:rPr>([\s\S]*?)<\/w:rPr>/.exec(body)?.[1] ?? "";
+      const style = parseRunProperties(rPr);
+      cells.push({
+        text: cellText(body),
+        fill: fill && fill.toUpperCase() !== "FFFFFF" && fill.toUpperCase() !== "AUTO" ? fill.toUpperCase() : undefined,
+        bold: style.bold,
+        color: style.color,
+      });
+    }
+    if (cells.length) rows.push(cells);
+  }
+  if (!rows.length) return null;
+  return { rows, columnCount: Math.max(...rows.map((row) => row.length)) };
 }
 
 /**
  * Reads Word paragraphs with their run formatting (bold, italic, size, colour),
- * alignment, heading level and bullet state, plus the pictures in document order.
+ * alignment, heading level, bullet state and paragraph shading, plus tables and
+ * the pictures in document order.
  */
 export function readDocxRichBlocks(bytes: Uint8Array): RichDocBlock[] {
   const entries = unzipOffice(bytes);
@@ -302,9 +349,25 @@ export function readDocxRichBlocks(bytes: Uint8Array): RichDocBlock[] {
     }
   }
 
+  let raw = new TextDecoder().decode(xml);
+
+  // Pull tables out first: they contain paragraphs, so splitting on </w:p>
+  // would destroy their structure.
+  const tables: string[] = [];
+  raw = raw.replace(/<w:tbl\b[\s\S]*?<\/w:tbl>/g, (match) => {
+    tables.push(match);
+    return `\u0000TBL${tables.length - 1}\u0000`;
+  });
+
   const blocks: RichDocBlock[] = [];
-  const raw = new TextDecoder().decode(xml);
   for (const paragraph of raw.split(/<\/w:p>/)) {
+    const tableMarker = /\u0000TBL(\d+)\u0000/.exec(paragraph);
+    if (tableMarker) {
+      const parsed = parseTable(tables[Number(tableMarker[1])] ?? "");
+      if (parsed) blocks.push({ kind: "table", rows: parsed.rows, columnCount: parsed.columnCount });
+      continue;
+    }
+
     const pPr = /<w:pPr>([\s\S]*?)<\/w:pPr>/.exec(paragraph)?.[1] ?? "";
     const properties = parseParagraphProperties(pPr);
 
