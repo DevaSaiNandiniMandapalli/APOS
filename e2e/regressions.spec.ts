@@ -83,8 +83,8 @@ test("AI tool copy discloses the AI text path instead of claiming nothing leaves
   await expect(page.getByText(/runs inside your browser, so the document never leaves your device/i)).toHaveCount(0);
 });
 
-test("the three previously flagged tool pages have no axe violations", async ({ page }) => {
-  for (const id of ["document-editor", "spreadsheet-editor", "workflow-builder"]) {
+test("the previously flagged tool pages have no axe violations", async ({ page }) => {
+  for (const id of ["document-editor", "spreadsheet-editor", "workflow-builder", "verify-compare"]) {
     await page.goto(`/tools/${id}`);
     await page.waitForLoadState("networkidle");
     const results = await new AxeBuilder({ page }).analyze();

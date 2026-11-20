@@ -1,6 +1,6 @@
 # APOS differentiation and feature map
 
-Status date: 19 November 2026. Competitor pages were read directly on the same date. This is a product comparison, not a legal or trademark review.
+Status date: 20 November 2026. Competitor pages were read directly on 19 November 2026. This is a product comparison, not a legal or trademark review.
 
 ## 1. Where APOS is genuinely different
 
@@ -9,7 +9,7 @@ Individual PDF operations are commodities. iLovePDF, Smallpdf, Adobe Acrobat onl
 1. **Local-first processing for heavy document work.** Merge, split, rotate, organise, repair, optimise, OCR, redact, protect, PDF-to-Office, PDF-to-images, PDF-to-text/HTML and the Office editors run in the browser with no document upload for the browser path.
 2. **No account and no file-retention model** for those browser tools.
 3. **A cross-format workspace, not only a PDF utility.** APOS also has a document editor, spreadsheet editor, presentation editor, universal converter and workflow builder in the same product.
-4. **Measured output and verification as a product principle.** Repair, optimisation and compression report real page/byte changes; the new Document Passport adds a share-readiness report and a clean-copy action.
+4. **Measured output and verification as a product principle.** Repair, optimisation and compression report real page/byte changes; Document Passport adds a share-readiness report and a clean-copy action; Verify & Compare measures what changed between two PDFs.
 5. **Honest status and capability communication.** Server-backed and AI-backed paths are now modelled explicitly instead of being described as "never uploaded".
 
 ### Table stakes that APOS already has
@@ -25,7 +25,7 @@ Merge, split, rotate, organise, delete/extract pages, compress, repair, optimise
 | Flatten PDF | Not a separate tool | Yes | Yes | Yes | Partial (forms only) |
 | PDF/A conversion and validation | Convert | Convert | Convert | Convert + validate PDF/A and PDF/UA | Convert only; no conformance test |
 | e-signature requests | iLoveSign | Sign.com | Request signatures | No | Gap |
-| Compare PDF | Yes | No dedicated tool | In Acrobat | Yes | Server-only compare |
+| Compare PDF | Yes | No dedicated tool | In Acrobat | Yes | **Local Verify & Compare** |
 | AI chat/summarise/translate | Yes | Yes | Yes | No | Yes (Sarvam) |
 | Custom workflows | Yes (account) | No | Actions/Wizard | No | Yes, browser-local |
 | Mobile/desktop apps | Yes | Yes | Yes | Yes (Windows) | Web only |
@@ -53,7 +53,7 @@ These are product directions, not claims that no competitor has ever shipped som
 
 **Limits:** It is a review aid. It cannot detect PII inside scanned page images, cannot inspect every object in an encrypted PDF, and does not clean Office packages.
 
-### B. Visual Fidelity / Verify (next)
+### B. Visual Fidelity / Verify (implemented in this branch)
 
 **What it is:** After an operation, render the relevant pages before and after, compare text and pixels, and report a fidelity score: "97.8% identical, page 3 text changed, 1 picture dropped, 2 links removed". For PDF-to-Office, report text coverage, page coverage, tables found, pictures kept, and pages that need OCR. For redaction, verify that no selectable text remains inside the redacted regions.
 
@@ -94,8 +94,8 @@ These are product directions, not claims that no competitor has ever shipped som
 
 ## 4. Recommended sequence
 
-1. **Ship Document Passport** and the current correctness fixes. Use it to anchor the privacy story.
-2. **Add Visual Fidelity/Verify** to compression, repair, redaction and PDF-to-Office. This is the strongest "proof" feature.
+1. **Ship Document Passport and Verify & Compare** and the current correctness fixes. Use them to anchor the privacy and proof story.
+2. **Extend Verify** to PDF-to-Office output and add redaction verification inside Redact PDF. This is the strongest "proof" feature.
 3. **Add Document Doctor** on top of the workflow engine.
 4. **Add Knowledge Extractor** once structured extraction can be evaluated against real documents.
 5. **Add Batch Intelligence** when there is evidence that users run recurring batches.

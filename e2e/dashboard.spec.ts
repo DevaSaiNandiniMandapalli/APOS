@@ -1580,6 +1580,10 @@ test("PDF page numbering worker cancellation terminates processing and exposes n
       if (message && typeof message === "object" && "options" in message) {
         tracked.add(this);
         (window as unknown as { __pageNumberLifecycle: { posted: boolean } }).__pageNumberLifecycle.posted = true;
+        // Give the browser test time to click Cancel before the worker starts.
+        const worker = this;
+        window.setTimeout(() => Reflect.apply(post, worker, args), 800);
+        return;
       }
       return Reflect.apply(post, this, args);
     } });

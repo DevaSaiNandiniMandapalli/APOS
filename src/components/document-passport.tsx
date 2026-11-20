@@ -266,7 +266,7 @@ export default function DocumentPassport() {
 
           <div className="passport-footer">
             <Sparkles size={16} aria-hidden="true" />
-            <span>Use the flags as a starting point, then verify the cleaned file with a fresh scan or the Compare workflow.</span>
+            <span>Use the flags as a starting point, then verify the cleaned file with a fresh scan or Verify & Compare.</span>
           </div>
         </div>
       ) : null}

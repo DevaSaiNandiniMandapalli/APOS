@@ -38,6 +38,7 @@ const SignPdf = dynamic(() => import("@/components/sign-pdf"), { ssr: false, loa
 const RedactPdf = dynamic(() => import("@/components/redact-pdf"), { ssr: false, loading });
 const UnlockPdf = dynamic(() => import("@/components/unlock-pdf"), { ssr: false, loading });
 const DocumentPassport = dynamic(() => import("@/components/document-passport"), { ssr: false, loading });
+const VerifyCompare = dynamic(() => import("@/components/verify-compare"), { ssr: false, loading });
 
 type ToolEntry = { pill?: string; render: () => ReactNode };
 
@@ -56,6 +57,7 @@ const TOOLS: Record<string, ToolEntry> = {
   "pdf-page-numbers": { pill: "Available · processed on this device", render: () => <PdfMarking operation="page-number" /> },
   "pdf-metadata": { pill: "Available · processed on this device", render: () => <PdfMetadataTool /> },
   "document-passport": { pill: "Available · local file fingerprint and privacy scan", render: () => <DocumentPassport /> },
+  "verify-compare": { pill: "Available · local visual and text comparison", render: () => <VerifyCompare /> },
   "protect-pdf": { pill: "Available · AES-256 encryption on this device", render: () => <ProtectPdf /> },
   "organize-pages": { pill: "Available · processed on this device", render: () => <OrganizePdf operation="reorder" /> },
   "delete-pdf-pages": { pill: "Available · processed on this device", render: () => <OrganizePdf operation="delete" /> },

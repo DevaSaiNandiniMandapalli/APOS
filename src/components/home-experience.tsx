@@ -7,14 +7,14 @@ import {
   Clock3, Combine, Command, FilePenLine, FileText, FileType, Image, ImagePlus, LayoutGrid, ListChecks,
   Menu, Minimize2, Moon, PanelsTopLeft, PenLine, PenTool, Presentation, Repeat2, ScanLine, ScanSearch,
   ScanText, Search, Sheet, ShieldCheck, Sparkles, Sun, Table2, WandSparkles, Workflow, Wrench,
-  Code2, FileOutput, X, Fingerprint
+  Code2, FileOutput, X, Fingerprint, GitCompareArrows
 } from "lucide-react";
 import { navigation, searchTools, studioDefinitions, studioById, toolDefinitions } from "@/lib/registry";
 import { siteFaqs } from "@/lib/faq";
 import FaqList from "@/components/faq-list";
 import SiteFooter from "@/components/site-footer";
 
-const icons = { FileText, Repeat2, PenLine, PanelsTopLeft, ShieldCheck, Sparkles, Image, ScanText, FileType, Table2, Presentation, WandSparkles, Workflow, Wrench, Code2, Combine, FilePenLine, LayoutGrid, PenTool, Minimize2, ImagePlus, ScanLine, FileOutput, Sheet, ListChecks, ScanSearch, Fingerprint };
+const icons = { FileText, Repeat2, PenLine, PanelsTopLeft, ShieldCheck, Sparkles, Image, ScanText, FileType, Table2, Presentation, WandSparkles, Workflow, Wrench, Code2, Combine, FilePenLine, LayoutGrid, PenTool, Minimize2, ImagePlus, ScanLine, FileOutput, Sheet, ListChecks, ScanSearch, Fingerprint, GitCompareArrows };
 const studioIcons = Object.fromEntries(studioDefinitions.map((s) => [s.id, icons[s.icon as keyof typeof icons] ?? FileText]));
 const toolIcons = Object.fromEntries(toolDefinitions.map((t) => [t.id, icons[t.icon as keyof typeof icons] ?? FileText]));
 
