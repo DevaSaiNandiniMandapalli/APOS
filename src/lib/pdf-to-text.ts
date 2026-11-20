@@ -1,7 +1,7 @@
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
 import { unzipSync } from "fflate";
 import { PDF_LIMITS, checkPdfHeader } from "./pdf-limits";
-import { CONVERSION_LIMITS, validateHtmlOutput, validatePlainTextOutput } from "./conversion-engine";
+import { CONVERSION_LIMITS, validateHtmlOutput, validateMarkdownOutput, validatePlainTextOutput } from "./conversion-engine";
 import { resolvePageSelection } from "./pdf-page-selection";
 
 export type PdfTextDocument = Pick<PDFDocumentProxy, "numPages" | "getPage">;
@@ -180,6 +180,74 @@ export async function convertPdfFileToHtml(
       emptyPages,
       warnings,
       archive: { bytes: packaged.archive, name: `${(file.name.replace(/\.[^.]+$/, "") || "document").replace(/[\\/:*?"<>|]/g, "-").slice(0, 80)}.zip` },
+    };
+  } finally {
+    if (abortHandler) signal.removeEventListener("abort", abortHandler);
+    if (input?.byteLength) input.fill(0);
+    if (loadingTask) { try { await loadingTask.destroy(); } catch { /* PDF.js may already have destroyed a cancelled task. */ } }
+  }
+}
+
+export async function convertPdfFileToMarkdown(
+  file: Pick<File, "name" | "size" | "arrayBuffer">,
+  settings: PdfTextSettings,
+  signal: AbortSignal,
+  onProgress: (progress: PdfTextProgress) => void,
+) {
+  if (!file.size) throw new Error("The selected file is empty.");
+  if (file.size > CONVERSION_LIMITS.inputFileBytes) throw new Error("PDF to Markdown accepts files up to 25 MB each.");
+  let input: Uint8Array | null = null;
+  let loadingTask: PDFDocumentLoadingTask | null = null;
+  let abortHandler: (() => void) | null = null;
+  try {
+    const buffer = await file.arrayBuffer();
+    if (signal.aborted) { new Uint8Array(buffer).fill(0); throw new DOMException("Conversion cancelled", "AbortError"); }
+    input = new Uint8Array(buffer);
+    if (!checkPdfHeader(input.subarray(0, 1024))) throw new Error("The selected file does not have a PDF signature.");
+    const pdfjs = await import("pdfjs-dist");
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+    loadingTask = pdfjs.getDocument({ data: input });
+    abortHandler = () => { if (loadingTask) void loadingTask.destroy(); };
+    signal.addEventListener("abort", abortHandler, { once: true });
+    let document: PDFDocumentProxy;
+    try { document = await loadingTask.promise; }
+    catch { if (signal.aborted) throw new DOMException("Conversion cancelled", "AbortError"); throw new Error("The PDF could not be opened. It may be corrupt, encrypted, or unsupported."); }
+    if (document.numPages < 1 || document.numPages > PDF_LIMITS.pages) throw new Error(`PDF files must contain 1-${PDF_LIMITS.pages} pages.`);
+    const selectedPages = resolvePageSelection(settings.pages, document.numPages);
+    const { extractPdfHtmlPages, buildPdfMarkdown } = await import("./pdf-html");
+    const extracted = await extractPdfHtmlPages(document, {
+      pages: selectedPages,
+      signal,
+      includePictures: settings.includePictures === true,
+      onProgress: (completedPages, totalPages) => onProgress({ completedPages, totalPages }),
+    });
+    const characterCount = extracted.pages.reduce((total, page) => total + page.blocks.reduce((sum, block) => {
+      if (block.kind === "text" || block.kind === "heading") return sum + block.text.length;
+      if (block.kind === "table") return sum + block.rows.flat().reduce((cells, cell) => cells + cell.length, 0);
+      return sum;
+    }, 0), 0);
+    const pictureCount = extracted.pages.reduce((total, page) => total + page.blocks.filter((block) => block.kind === "image").length, 0);
+    if (characterCount === 0 && (!settings.includePictures || pictureCount === 0)) {
+      throw new Error("No selectable text was found in the selected pages. Scanned pages need OCR before text can be extracted as Markdown.");
+    }
+    const title = settings.title?.trim() || file.name.replace(/\.[^.]+$/, "") || "PDF document";
+    const markdown = buildPdfMarkdown(title, extracted.pages, {
+      includeImages: settings.includePictures === true,
+      includeTables: settings.includeTables !== false,
+      includePageLabels: settings.includePageLabels !== false,
+    });
+    const bytes = new TextEncoder().encode(markdown);
+    validateMarkdownOutput(bytes);
+    const emptyPages = extracted.pages.filter((page) => page.blocks.length === 0).map((page) => page.page);
+    return {
+      bytes,
+      pageCount: extracted.totalPages,
+      characterCount,
+      emptyPages,
+      warnings: [
+        ...(characterCount === 0 ? ["This PDF has no selectable text; the Markdown contains pictures only. Run OCR PDF for searchable text."] : []),
+        ...(emptyPages.length ? [`${emptyPages.length} selected page(s) had no extractable content: ${emptyPages.join(", ")}.`] : []),
+      ],
     };
   } finally {
     if (abortHandler) signal.removeEventListener("abort", abortHandler);

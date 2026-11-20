@@ -20,8 +20,8 @@ Merge, split, rotate, organise, delete/extract pages, compress, repair, optimise
 
 | Capability | iLovePDF | Smallpdf | Adobe online | PDF24 | APOS status |
 |---|---|---|---|---|---|
-| PDF to Markdown | Yes | Via converter/AI | Yes (AI) | Yes | Gap |
-| PDF forms (create/fill) | Yes, new | Yes | Yes | Yes | Server-only fill |
+| PDF to Markdown | Yes | Via converter/AI | Yes (AI) | Yes | **Yes, local** |
+| PDF forms (create/fill) | Yes, new | Yes | Yes | Yes | **Yes, local** |
 | Flatten PDF | Not a separate tool | Yes | Yes | Yes | Partial (forms only) |
 | PDF/A conversion and validation | Convert | Convert | Convert | Convert + validate PDF/A and PDF/UA | Convert only; no conformance test |
 | e-signature requests | iLoveSign | Sign.com | Request signatures | No | Gap |
@@ -99,7 +99,7 @@ These are product directions, not claims that no competitor has ever shipped som
 3. **Add Document Doctor** on top of the workflow engine.
 4. **Add Knowledge Extractor** once structured extraction can be evaluated against real documents.
 5. **Add Batch Intelligence** when there is evidence that users run recurring batches.
-6. Add table-stakes gaps (PDF to Markdown, local form filling, flatten, PDF/A validation) only when they block adoption.
+6. Add table-stakes gaps (flatten, PDF/A validation, accessibility checking) only when they block adoption.
 
 ## 5. Success metrics
 

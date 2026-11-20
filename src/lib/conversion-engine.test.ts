@@ -1,11 +1,12 @@
 ﻿import { describe, expect, it } from "vitest";
-import { CONVERSION_LIMITS, conversionCapabilities, findConversionCapability, identifyInputFormat, runBoundedQueue, safeOutputFilename, validateConversionInput, validateConversionOutput, validateHtmlOutput, validatePlainTextOutput } from "./conversion-engine";
+import { CONVERSION_LIMITS, conversionCapabilities, findConversionCapability, identifyInputFormat, runBoundedQueue, safeOutputFilename, validateConversionInput, validateConversionOutput, validateHtmlOutput, validateMarkdownOutput, validatePlainTextOutput } from "./conversion-engine";
 
 describe("conversion engine declarations and validation", () => {
-  it("declares PDF text/HTML and all nine supported image conversion capabilities", () => {
+  it("declares PDF text/HTML/Markdown and all nine supported image conversion capabilities", () => {
     expect(conversionCapabilities.map(({ id, inputFormat, outputFormat, convert }) => ({ id, inputFormat, outputFormat, hasExecutor: typeof convert === "function" }))).toEqual([
       { id: "pdf-to-text", inputFormat: "pdf", outputFormat: "txt", hasExecutor: true },
       { id: "pdf-to-html", inputFormat: "pdf", outputFormat: "html", hasExecutor: true },
+      { id: "pdf-to-markdown", inputFormat: "pdf", outputFormat: "md", hasExecutor: true },
       { id: "png-to-jpeg", inputFormat: "png", outputFormat: "jpeg", hasExecutor: true },
       { id: "png-to-webp", inputFormat: "png", outputFormat: "webp", hasExecutor: true },
       { id: "jpeg-to-png", inputFormat: "jpeg", outputFormat: "png", hasExecutor: true },
@@ -18,6 +19,7 @@ describe("conversion engine declarations and validation", () => {
     ]);
     expect(findConversionCapability("pdf", "txt")?.maxBatchFiles).toBe(20);
     expect(findConversionCapability("pdf", "html")?.outputExtension).toBe("html");
+    expect(findConversionCapability("pdf", "md")?.outputExtension).toBe("md");
     expect(findConversionCapability("png", "jpeg")?.outputMediaType).toBe("image/jpeg");
     expect(findConversionCapability("webp", "png")?.outputExtension).toBe("png");
     expect(findConversionCapability("png", "png")).toBeUndefined();
@@ -51,6 +53,8 @@ describe("conversion engine declarations and validation", () => {
     const safe = new TextEncoder().encode("<!doctype html><html lang=\"en\"><body><main><pre>&lt;script&gt;</pre></main></body></html>");
     expect(() => validateHtmlOutput(safe)).not.toThrow();
     expect(() => validateHtmlOutput(new TextEncoder().encode("<!doctype html><html lang=\"en\"><body><main><pre><script>alert(1)</script></pre></main></body></html>"))).toThrow("structure validation");
+    expect(() => validateMarkdownOutput(new TextEncoder().encode("# Heading\n\n| A | B |\n| --- | --- |\n| 1 | 2 |"))).not.toThrow();
+    expect(() => validateMarkdownOutput(new TextEncoder().encode("# Heading\n\n<script>alert(1)</script>"))).toThrow("structure validation");
   });
 
   it("resolves duplicate output names deterministically and strips unsafe path characters", () => {

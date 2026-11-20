@@ -51,7 +51,7 @@ function ConversionPreview({ item, copied, onCopy }: { item: ConversionItem; cop
   </details>;
 }
 
-export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "txt" | "html" }) {
+export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "txt" | "html" | "md" }) {
   const [items, setItems] = useState<ConversionItem[]>([]);
   const [includePageLabels, setIncludePageLabels] = useState(true);
   const [defaultPageMode, setDefaultPageMode] = useState<"all" | "custom">("all");
@@ -180,7 +180,7 @@ export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "tx
           validateConversionOutput(result.bytes, converter);
           const outputTotal = itemsRef.current.reduce((sum, entry) => sum + entry.outputBytes, 0);
           if (outputTotal + result.bytes.byteLength + (result.archive?.bytes.byteLength ?? 0) > CONVERSION_LIMITS.batchBytes) throw new Error(`Validated outputs would exceed the ${formatBytes(CONVERSION_LIMITS.batchBytes)} batch output limit.`);
-          const preview = outputFormat === "txt" ? new TextDecoder("utf-8").decode(result.bytes.subarray(0, 4000)) : "";
+          const preview = (outputFormat === "txt" || outputFormat === "md") ? new TextDecoder("utf-8").decode(result.bytes.subarray(0, 4000)) : "";
           const blob = new Blob([result.bytes.slice().buffer as ArrayBuffer], { type: converter.outputMediaType });
           result.bytes.fill(0); convertedBytes = null;
           const url = URL.createObjectURL(blob);
@@ -306,7 +306,7 @@ export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "tx
     const failed = itemsRef.current.filter((item) => item.status === "failed" || item.status === "skipped" || item.status === "cancelled");
     if (!failed.length) return;
     revokeAuxiliaryUrls();
-    const report = [`APOS PDF to ${outputFormat === "html" ? "HTML" : "text"} batch report`, "", ...failed.map((item) => `${item.file.name} — ${statusLabel(item.status)}: ${item.error || "No additional details."}`)].join("\n");
+    const report = [`APOS PDF to ${outputFormat === "html" ? "HTML" : outputFormat === "md" ? "Markdown" : "text"} batch report`, "", ...failed.map((item) => `${item.file.name} — ${statusLabel(item.status)}: ${item.error || "No additional details."}`)].join("\n");
     const url = URL.createObjectURL(new Blob([report], { type: "text/plain;charset=utf-8" }));
     urlsRef.current.push(url); reportUrlRef.current = url; setReportUrl(url);
   };
@@ -338,13 +338,15 @@ export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "tx
   const progress = items.filter((item) => item.totalPages > 0).reduce((sum, item) => sum + item.completedPages, 0);
   const totalProgress = items.reduce((sum, item) => sum + item.totalPages, 0);
   const converter = findConversionCapability("pdf", outputFormat) ?? conversionCapabilities[0];
-  const outputLabel = outputFormat === "html" ? "HTML" : "text";
+  const outputLabel = outputFormat === "html" ? "HTML" : outputFormat === "md" ? "Markdown" : "text";
 
   return <section className="merge-panel" aria-labelledby="pdf-to-text-heading">
     <h2 id="pdf-to-text-heading">Convert PDF to {outputLabel} on this device</h2>
     <p>{outputFormat === "html"
       ? "Turn selectable PDF text into a safe, responsive HTML document. Reading mode rebuilds headings, paragraphs and tables; layout mode approximates the original page arrangement. Pictures and tables can be included, and the complete HTML package is available with its assets in a ZIP."
-      : "Extract selectable text from PDF pages into UTF-8 plain-text files, with optional page headings, custom page ranges, previews and batch downloads. Scanned pages without a text layer need OCR, which is not included in this converter."}</p>
+      : outputFormat === "md"
+        ? "Turn selectable PDF text into clean Markdown with headings, paragraphs and tables. Choose page labels, page ranges and optional pictures. The result is ready for notes, documentation and LLM workflows."
+        : "Extract selectable text from PDF pages into UTF-8 plain-text files, with optional page headings, custom page ranges, previews and batch downloads. Scanned pages without a text layer need OCR, which is not included in this converter."}</p>
     <div className="privacy-note">Input is identified from its file signature. Up to {converter.maxBatchFiles} PDFs, {formatBytes(converter.maxFileBytes)} each and {formatBytes(converter.maxBatchBytes)} total; at most {CONVERSION_LIMITS.concurrentFiles} files are processed at once and each PDF is limited to {PDF_LIMITS.pages} pages. PDF reading order follows the content order encoded by the source file. Nothing is uploaded.</div>
     <label className="file-picker">Choose PDF files<input ref={inputRef} type="file" accept="application/pdf,.pdf" multiple disabled={busy || zipBusy} onChange={(event) => { if (event.currentTarget.files) void addFiles(event.currentTarget.files); }}/></label>
     <div className={`drop-zone ${dragActive ? "drop-active" : ""}`} onDragEnter={(event) => { event.preventDefault(); setDragActive(true); }} onDragOver={(event) => event.preventDefault()} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragActive(false); }} onDrop={(event) => { event.preventDefault(); setDragActive(false); if (event.dataTransfer.files) void addFiles(event.dataTransfer.files); }}>
@@ -363,11 +365,11 @@ export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "tx
         <input id="pdf-text-default-range" value={defaultPageRange} disabled={busy} onChange={(event) => setDefaultPageRange(event.target.value)} placeholder="1-3, 5" aria-describedby="pdf-text-default-range-help" />
         <span id="pdf-text-default-range-help" className="route-note">Use page numbers or ranges, such as 1-3, 5. Selected pages keep the entered order.</span>
       </label>}
-      {outputFormat === "html" && <>
-        <label htmlFor="pdf-html-mode">HTML mode
+      {(outputFormat === "html" || outputFormat === "md") && <>
+        {outputFormat === "html" && <label htmlFor="pdf-html-mode">HTML mode
           <select id="pdf-html-mode" value={htmlMode} disabled={busy} onChange={(event) => setHtmlMode(event.target.value as "reading" | "layout")}><option value="reading">Reading mode — responsive and semantic</option><option value="layout">Layout mode — approximate page arrangement</option></select>
-        </label>
-        <label className="office-check"><input type="checkbox" checked={includePictures} disabled={busy} onChange={(event) => setIncludePictures(event.target.checked)} /> Include pictures found in the PDF</label>
+        </label>}
+        <label className="office-check"><input type="checkbox" checked={includePictures} disabled={busy} onChange={(event) => setIncludePictures(event.target.checked)} /> Include pictures found in the PDF{outputFormat === "md" ? " (data URLs)" : ""}</label>
         <label className="office-check"><input type="checkbox" checked={includeTables} disabled={busy} onChange={(event) => setIncludeTables(event.target.checked)} /> Detect and include tables</label>
       </>}
     </fieldset>
@@ -389,7 +391,7 @@ export default function PdfToText({ outputFormat = "txt" }: { outputFormat?: "tx
             {item.status === "complete" && item.url && <a className="text-link" href={item.url} download={item.outputName}>{item.outputName}</a>}
             {item.status === "complete" && item.archiveUrl && <a className="text-link" href={item.archiveUrl} download={item.archiveName}>Download ZIP package · {item.archiveName}</a>}
             {item.status === "complete" && outputFormat === "html" && item.url && <a className="text-link" href={item.url} target="_blank" rel="noopener noreferrer">Preview HTML in a new tab</a>}
-            {item.status === "complete" && outputFormat === "txt" && item.preview && <ConversionPreview item={item} copied={copiedId === item.id} onCopy={() => void copyPreview(item)} />}
+            {item.status === "complete" && (outputFormat === "txt" || outputFormat === "md") && item.preview && <ConversionPreview item={item} copied={copiedId === item.id} onCopy={() => void copyPreview(item)} />}
             {item.status === "failed" && <button type="button" onClick={() => retryItem(item.id)} disabled={busy}>Retry</button>}
             {["queued", "failed", "processing", "cancelled"].includes(item.status) && <button type="button" onClick={() => skipItem(item.id)}>Skip</button>}
           </div>

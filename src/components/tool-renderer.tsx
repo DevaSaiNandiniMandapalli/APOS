@@ -39,6 +39,7 @@ const RedactPdf = dynamic(() => import("@/components/redact-pdf"), { ssr: false,
 const UnlockPdf = dynamic(() => import("@/components/unlock-pdf"), { ssr: false, loading });
 const DocumentPassport = dynamic(() => import("@/components/document-passport"), { ssr: false, loading });
 const VerifyCompare = dynamic(() => import("@/components/verify-compare"), { ssr: false, loading });
+const PdfFormsTool = dynamic(() => import("@/components/pdf-forms"), { ssr: false, loading });
 
 type ToolEntry = { pill?: string; render: () => ReactNode };
 
@@ -52,6 +53,7 @@ const TOOLS: Record<string, ToolEntry> = {
   "pdf-to-images": { pill: "Available · 72–300 DPI PNG/JPG on this device", render: () => <PdfToImages /> },
   "pdf-to-text": { pill: "Available · browser-local batch conversion", render: () => <PdfToText /> },
   "pdf-to-html": { pill: "Available · reading and layout HTML with a ZIP package", render: () => <PdfToText outputFormat="html" /> },
+  "pdf-to-markdown": { pill: "Available · clean Markdown with optional pictures", render: () => <PdfToText outputFormat="md" /> },
   "images-to-pdf": { pill: "Available · page layout, margins and compression on this device", render: () => <ImagesToPdf /> },
   "pdf-watermark": { pill: "Available · processed on this device", render: () => <PdfMarking operation="watermark" /> },
   "pdf-page-numbers": { pill: "Available · processed on this device", render: () => <PdfMarking operation="page-number" /> },
@@ -69,6 +71,7 @@ const TOOLS: Record<string, ToolEntry> = {
   "unlock-pdf": { pill: "Available · password removed on this device", render: () => <UnlockPdf /> },
   "image-converter": { pill: "Available · browser-local image conversion", render: () => <ImageConverter /> },
   "edit-pdf": { pill: "Available · annotations flattened on this device", render: () => <PdfViewer /> },
+  "pdf-forms": { pill: "Available · local AcroForm filling and flattening", render: () => <PdfFormsTool /> },
   "document-editor": { pill: "Available · browser-local rich-text editor", render: () => <DocumentEditor /> },
   "spreadsheet-editor": { pill: "Available · browser-local formulas and CSV", render: () => <SpreadsheetStudio /> },
   "presentation-editor": { pill: "Available · browser-local slides and PDF export", render: () => <PresentationStudio /> },

@@ -41,6 +41,77 @@ export type PdfHtmlOptions = {
   assetPath?: (pageNumber: number, imageIndex: number) => string;
 };
 
+export type PdfMarkdownOptions = {
+  includeImages?: boolean;
+  includeTables?: boolean;
+  includePageLabels?: boolean;
+};
+
+function escapeMarkdown(value: string): string {
+  return value
+    .split("\n")
+    .map((line) => {
+      const escaped = line
+        .replace(/\\/g, "\\\\")
+        .replace(/([`*_[\]<>|])/g, "\\$1");
+      return escaped.replace(/^(\s*)(#{1,6}\s|>|[-+*]\s|\d+[.)]\s)/, "$1\\$2");
+    })
+    .join("\n");
+}
+
+function markdownCell(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/\|/g, "\\|").replace(/\s+/g, " ").trim();
+}
+
+function markdownTable(rows: string[][]): string {
+  if (!rows.length) return "";
+  const columns = Math.max(...rows.map((row) => row.length));
+  const cell = (row: string[], index: number) => markdownCell(row[index] ?? "");
+  const header = rows[0];
+  const body = rows.slice(1);
+  const lines = [
+    `| ${Array.from({ length: columns }, (_, index) => cell(header, index)).join(" | ")} |`,
+    `| ${Array.from({ length: columns }, () => "---").join(" | ")} |`,
+    ...body.map((row) => `| ${Array.from({ length: columns }, (_, index) => cell(row, index)).join(" | ")} |`),
+  ];
+  return lines.join("\n");
+}
+
+/**
+ * Convert the same structured page blocks used by PDF-to-HTML into a portable
+ * Markdown document. Images are data URLs when explicitly enabled; the default
+ * keeps the output text-focused so it can be pasted into notes or an LLM.
+ */
+export function buildPdfMarkdown(title: string, pages: HtmlPage[], options: PdfMarkdownOptions = {}): string {
+  const includeImages = options.includeImages === true;
+  const includeTables = options.includeTables !== false;
+  const includePageLabels = options.includePageLabels !== false;
+  const sections: string[] = [`# ${escapeMarkdown(title)}`];
+  for (const page of pages) {
+    const blocks: string[] = [];
+    for (const block of page.blocks) {
+      if (block.kind === "heading") {
+        blocks.push(`${"#".repeat(Math.min(6, Math.max(1, block.level)))} ${escapeMarkdown(block.text)}`);
+      } else if (block.kind === "table") {
+        if (!includeTables) {
+          blocks.push(block.rows.map((row) => row.map(markdownCell).join(" | ")).join("\n"));
+        } else {
+          const table = markdownTable(block.rows);
+          if (table) blocks.push(table);
+        }
+      } else if (block.kind === "image") {
+        if (includeImages && block.dataUrl) blocks.push(`![Picture on page ${page.page}](${block.dataUrl})`);
+      } else {
+        blocks.push(escapeMarkdown(block.text));
+      }
+    }
+    if (!blocks.length) blocks.push("_This page has no selectable text or pictures._");
+    sections.push(`${includePageLabels ? `## Page ${page.page}\n\n` : ""}${blocks.join("\n\n")}`);
+  }
+  return `${sections.join("\n\n")}\n`;
+}
+
+
 type PdfJsModule = typeof import("pdfjs-dist");
 
 export async function extractPdfHtmlPages(

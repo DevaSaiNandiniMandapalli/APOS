@@ -1,7 +1,7 @@
 ﻿import { checkPdfHeader } from "./pdf-limits";
 import { imageFormatSignature, readImageDimensions } from "./image-format";
 
-export type ConversionFormat = "pdf" | "txt" | "html" | "png" | "jpeg" | "webp" | "tiff" | "docx" | "xlsx" | "pptx" | "odt" | "ods" | "odp" | "unknown";
+export type ConversionFormat = "pdf" | "txt" | "html" | "md" | "png" | "jpeg" | "webp" | "tiff" | "docx" | "xlsx" | "pptx" | "odt" | "ods" | "odp" | "unknown";
 export type ConversionStatus = "queued" | "validating" | "processing" | "complete" | "failed" | "skipped" | "cancelled";
 export type ConversionProgress = { completed: number; total: number };
 export type ConversionResult = {
@@ -73,6 +73,28 @@ export const conversionCapabilities = [
       }, signal, ({ completedPages, totalPages }) => onProgress({ completed: completedPages, total: totalPages }));
     },
   },
+  {
+    id: "pdf-to-markdown",
+    inputFormat: "pdf",
+    outputFormat: "md",
+    inputExtensions: [".pdf"],
+    outputExtension: "md",
+    outputMediaType: "text/markdown;charset=utf-8",
+    maxFileBytes: 25 * 1024 * 1024,
+    maxBatchFiles: 20,
+    maxBatchBytes: 100 * 1024 * 1024,
+    maxPages: 500,
+    validateOutput: validateMarkdownOutput,
+    convert: async (file, settings, signal, onProgress) => {
+      const { convertPdfFileToMarkdown } = await import("./pdf-to-text");
+      return convertPdfFileToMarkdown(file, {
+        includePageLabels: settings.includePageLabels !== false,
+        pages: String(settings.pages ?? ""),
+        includePictures: settings.includePictures === true,
+        includeTables: settings.includeTables !== false,
+      }, signal, ({ completedPages, totalPages }) => onProgress({ completed: completedPages, total: totalPages }));
+    },
+  },
   ...(["png", "jpeg", "webp", "tiff"] as const).flatMap((inputFormat) =>
     (["png", "jpeg", "webp"] as const)
       .filter((outputFormat) => outputFormat !== inputFormat)
@@ -128,7 +150,7 @@ export const CONVERSION_LIMITS = {
   outputCharacters: 20 * 1024 * 1024,
 } as const;
 
-const signatures: ReadonlyArray<{ format: Exclude<ConversionFormat, "txt" | "html" | "unknown" | "docx" | "xlsx" | "pptx" | "odt" | "ods" | "odp">; test(bytes: Uint8Array): boolean }> = [
+const signatures: ReadonlyArray<{ format: Exclude<ConversionFormat, "txt" | "html" | "md" | "unknown" | "docx" | "xlsx" | "pptx" | "odt" | "ods" | "odp">; test(bytes: Uint8Array): boolean }> = [
   { format: "pdf", test: (bytes) => checkPdfHeader(bytes) },
   { format: "png", test: (bytes) => bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a },
   { format: "jpeg", test: (bytes) => bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff },
@@ -171,6 +193,14 @@ export function validateHtmlOutput(bytes: Uint8Array) {
   const unsafeAttribute = /<[^>]+\son\w+\s*=/i.test(html);
   const unsafeUrl = /(?:href|src)\s*=\s*["']?\s*javascript:/i.test(html);
   if (!/^<!doctype html><html lang="en">[\s\S]*<main>[\s\S]*<\/main>[\s\S]*<\/body><\/html>$/i.test(html) || unsafeTag || unsafeAttribute || unsafeUrl) throw new Error("The generated HTML did not pass document structure validation.");
+}
+
+export function validateMarkdownOutput(bytes: Uint8Array) {
+  validatePlainTextOutput(bytes);
+  const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  if (/<script\b|javascript:|\son\w+\s*=/i.test(text)) {
+    throw new Error("The generated Markdown did not pass document structure validation.");
+  }
 }
 
 export function safeOutputFilename(inputName: string, requestedBase: string, extension: string, occupied: Set<string>) {
