@@ -1,5 +1,12 @@
 # License review
 
+> **Corrected 20 November 2026:** the earlier statement that every runtime
+> component is permissive was too broad. `pdf2docx` is MIT but pulls in
+> PyMuPDF, which is AGPL-3.0 or commercially licensed. The full server image
+> also installs Ghostscript (AGPL-3.0 or commercial). These are optional,
+> server-side components; see `THIRD-PARTY-NOTICES.md` and
+> `docs/CODE-REUSE-POLICY.md` before distributing a container image.
+
 Reviewed dependency licenses from the installed packages (`package.json`
 `license` fields) on the current development branch.
 

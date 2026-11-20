@@ -23,6 +23,12 @@ services:
         value: "50"
       - key: APOS_MAX_FILES
         value: "20"
+      - key: APOS_MAX_PDF_PAGES
+        value: "500"
+      - key: APOS_MAX_CONCURRENT
+        value: "2"
+      - key: APOS_TRUST_X_FORWARDED_FOR
+        value: "true"
       - key: APOS_RATE_LIMIT_REQUESTS
         value: "120"
       - key: APOS_RATE_LIMIT_WINDOW

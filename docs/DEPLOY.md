@@ -1,53 +1,102 @@
-# Deploying APOS (permanent URL)
+# Deploying APOS
 
-The app is a standard Next.js 16 app. No database or storage is required: all
-document processing happens in the browser.
+APOS is a **static Next.js export** (`output: "export"`). The production web app
+is served from `out/`; `next start` is not used. The optional FastAPI service is
+deployed separately.
 
-## Option A — Vercel (recommended, free)
+## Option A — Cloudflare (the current production path, recommended)
 
-1. Sign in at https://vercel.com with the GitHub account that owns the repo.
-2. **Add New → Project → Import Git Repository** and choose
-   `DevaSaiNandiniMandapalli/APOS`.
-3. Set **Branch** to `lemon/design-and-build` (or merge it to `master` first).
-4. Framework preset: **Next.js** · Root directory: `.` · Build command:
-   `npm run build` · Install: `npm ci` (defaults are fine).
-5. Environment variables (optional):
-   - `SARVAM_API_KEY` — enables the AI assistant (server-side only).
-   - `SARVAM_API_URL`, `SARVAM_MODEL` — only if you need overrides.
-6. **Deploy**. Your URL will be `https://<project>.vercel.app`.
+1. Build:
+   ```powershell
+   npm ci
+   npm run build
+   ```
+2. Deploy:
+   ```powershell
+   npx wrangler deploy
+   ```
+3. Set `SARVAM_API_KEY` as a Cloudflare Worker secret for `/api/ai`:
+   ```powershell
+   npx wrangler secret put SARVAM_API_KEY
+   ```
+4. The Worker reads `worker/index.ts`; static assets come from `out/`. The CSP
+   and security headers are in `public/_headers` and are copied into `out/`.
 
-Every later push to that branch produces a new preview deployment.
+### Optional processing server
 
-## Option B — Netlify
+Deploy `backend/` separately and build the site with a **stable** URL:
 
-1. https://app.netlify.com → **Add new site → Import an existing project**.
-2. Pick the repo and branch `lemon/design-and-build`.
-3. Build command `npm run build`; the Netlify Next.js runtime is detected
-   automatically. Publish directory `.next`.
-4. Add the same environment variables, then deploy.
-
-## Option C — Render
-
-1. https://dashboard.render.com → **New → Web Service** → connect the repo.
-2. Environment: Node. Build: `npm ci && npm run build`.
-   Start: `npm run start -- -p $PORT`.
-3. Add environment variables and deploy.
-
-## Option D — Temporary preview (what is running now)
-
-A Cloudflare quick tunnel exposes the workspace server:
-
-```
-cloudflared tunnel --url http://localhost:3000 --protocol http2
+```powershell
+$env:NEXT_PUBLIC_APOS_API_URL="https://api.example.com"
+npm run build
+powershell -ExecutionPolicy Bypass -File scripts/patch-headers.mjs
+npx wrangler deploy
 ```
 
-It only lives while the workspace server runs, so use it for review, not as a
-permanent address.
+Do not bake a Cloudflare quick tunnel (`*.trycloudflare.com`) into a production
+build. Quick tunnels are temporary and can disappear or be reissued.
 
-## Notes
+## Option B — Vercel
 
-- The FastAPI backend under `backend/` is not needed by the web app; deploy it
-  separately only if you extend the API.
-- Never commit `SARVAM_API_KEY`; set it in the host's environment settings.
-- CI (`docs/ci-workflow.yml`) requires the GitHub `workflow` scope to be
-  activated.
+Vercel can serve a static export:
+
+1. Framework preset: **Next.js**
+2. Build command: `npm run build`
+3. Output directory: `out`
+4. Add `NEXT_PUBLIC_APOS_API_URL` only if a stable processing server exists.
+
+Vercel does not run `worker/index.ts`. If you need AI, host the AI proxy
+separately (or use the Cloudflare deployment) and point the frontend at it. The
+`public/_headers` file is a Cloudflare/Netlify convention; add equivalent
+headers in Vercel if you deploy there.
+
+## Option C — Netlify
+
+1. Build command: `npm run build`
+2. Publish directory: `out`
+3. Do **not** use the Next.js runtime plugin with `output: "export"`.
+
+`public/_headers` is copied into `out/` and Netlify honors it.
+
+## Option D — Render (static site)
+
+Use a **Static Site**, not a Web Service:
+
+- Build: `npm ci && npm run build`
+- Publish: `out`
+- Do not use `npm run start`; the project is a static export.
+
+The FastAPI service has a separate blueprint in `render.yaml`. The free 512 MB
+plan is not suitable for LibreOffice conversions; use a larger instance or the
+full Docker image on a host with at least 1 GB.
+
+## Environment variables
+
+| Variable | Where | Purpose |
+| --- | --- | --- |
+| `SARVAM_API_KEY` | Cloudflare Worker secret | Server-only AI key. Never expose it in the client. |
+| `SARVAM_API_URL` / `SARVAM_MODEL` | Worker environment | Optional AI endpoint/model overrides. |
+| `NEXT_PUBLIC_APOS_API_URL` | Build time | Stable processing-server origin. |
+| `NEXT_PUBLIC_SITE_URL` | Build time | Canonical site URL for metadata/sitemap. |
+| `CORS_ORIGINS` | FastAPI | Allowed browser origins for the processing API. |
+
+## Verification
+
+```powershell
+npm run typecheck
+npm run lint
+npm test
+npm run build
+npm run test:e2e -- --workers=1
+backend/.venv/Scripts/python.exe -m pytest backend/tests
+```
+
+Check the deployed response headers:
+
+```powershell
+curl.exe -I https://your-site.example/
+```
+
+You should see `Content-Security-Policy`, `X-Content-Type-Options`,
+`X-Frame-Options`, `Referrer-Policy` and HSTS. If you deploy somewhere that
+ignores `_headers`, configure those headers in that platform.

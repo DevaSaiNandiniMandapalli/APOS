@@ -65,6 +65,9 @@ Environment=HOME=$STATE_DIR
 Environment=CORS_ORIGINS=https://apos.nxtgensec.org
 Environment=APOS_MAX_UPLOAD_MB=50
 Environment=APOS_MAX_FILES=20
+Environment=APOS_MAX_PDF_PAGES=500
+Environment=APOS_MAX_CONCURRENT=4
+Environment=APOS_TRUST_X_FORWARDED_FOR=true
 Environment=APOS_RATE_LIMIT_REQUESTS=120
 Environment=APOS_RATE_LIMIT_WINDOW=60
 ExecStart=$APP_DIR/backend/.venv/bin/uvicorn apos_api.main:app --host 127.0.0.1 --port 8000

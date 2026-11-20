@@ -13,6 +13,7 @@ temporary directory that is removed by the tool before returning.
 from __future__ import annotations
 
 import json
+import io
 import os
 import threading
 import time
@@ -20,6 +21,7 @@ import urllib.parse
 from collections import deque
 from pathlib import Path
 
+import pypdf
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,7 +40,16 @@ MAX_FILES = int(os.getenv("APOS_MAX_FILES", "20"))
 MAX_OUTPUT_BYTES = int(os.getenv("APOS_MAX_OUTPUT_MB", "100")) * 1024 * 1024
 RATE_LIMIT_REQUESTS = int(os.getenv("APOS_RATE_LIMIT_REQUESTS", "120"))
 RATE_LIMIT_WINDOW = int(os.getenv("APOS_RATE_LIMIT_WINDOW", "60"))
+MAX_PDF_PAGES = int(os.getenv("APOS_MAX_PDF_PAGES", "500"))
+MAX_CONCURRENT = max(1, int(os.getenv("APOS_MAX_CONCURRENT", "4")))
+TRUST_X_FORWARDED_FOR = os.getenv("APOS_TRUST_X_FORWARDED_FOR", "false").lower() in {"1", "true", "yes", "on"}
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
+MAX_REQUEST_BYTES = MAX_UPLOAD_BYTES + 16 * 1024 * 1024
+_PROCESSING_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT)
+
+
+class ServerBusy(Exception):
+    """Raised when every processing slot is occupied for longer than the wait."""
 
 
 class HealthResponse(BaseModel):
@@ -91,8 +102,44 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 def _client_key(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    return forwarded or (request.client.host if request.client else "unknown")
+    if TRUST_X_FORWARDED_FOR:
+        forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        if forwarded:
+            return forwarded
+    return request.client.host if request.client else "unknown"
+
+
+def _check_content_length(request: Request) -> None:
+    raw = request.headers.get("content-length")
+    if raw is None:
+        return
+    try:
+        length = int(raw)
+    except ValueError:
+        raise HTTPException(400, "Invalid Content-Length header.") from None
+    if length > MAX_REQUEST_BYTES:
+        raise HTTPException(413, f"Request bodies are capped at {MAX_REQUEST_BYTES // (1024 * 1024)} MB.")
+
+
+def _validate_page_count(filename: str, data: bytes) -> None:
+    if not _looks_like_pdf(data):
+        return
+    try:
+        reader = pypdf.PdfReader(io.BytesIO(data))
+        page_count = len(reader.pages)
+    except Exception:
+        return  # The tool reports encrypted/corrupt PDFs with its own message.
+    if page_count > MAX_PDF_PAGES:
+        raise HTTPException(413, f"{filename or 'This PDF'} has {page_count} pages; the server limit is {MAX_PDF_PAGES}.")
+
+
+def _run_guarded(function, *args):
+    if not _PROCESSING_SLOTS.acquire(timeout=30):
+        raise ServerBusy()
+    try:
+        return function(*args)
+    finally:
+        _PROCESSING_SLOTS.release()
 
 
 def _cors_origins() -> list[str]:
@@ -219,6 +266,7 @@ def _validate_signature(tool: Tool, filename: str, data: bytes) -> None:
 
 
 async def _collect_form(request: Request, tool: Tool | None = None) -> tuple[list[UploadedFile], dict[str, str]]:
+    _check_content_length(request)
     try:
         form = await request.form()
     except Exception:
@@ -239,6 +287,7 @@ async def _collect_form(request: Request, tool: Tool | None = None) -> tuple[lis
                 _validate_signature(tool, filename, data)
             else:
                 _validate_generic(filename, data)
+            _validate_page_count(filename, data)
             if data:
                 files.append(UploadedFile(name=filename, data=data))
         else:
@@ -283,7 +332,9 @@ async def run_tool(name: str, request: Request) -> Response:
     if not tool.multiple and len(files) > 1:
         raise HTTPException(400, f"{tool.label} takes a single file.")
     try:
-        result = await run_in_threadpool(tool.run, files, options)
+        result = await run_in_threadpool(_run_guarded, tool.run, files, options)
+    except ServerBusy:
+        raise HTTPException(503, "The processing server is busy. Wait a moment and try again.") from None
     except ToolError as exc:
         raise HTTPException(400, str(exc)) from None
     except Exception:
@@ -302,7 +353,9 @@ async def run_workflow_endpoint(request: Request) -> Response:
     if not files:
         raise HTTPException(400, "Add at least one file to run a workflow on.")
     try:
-        result = await run_in_threadpool(run_workflow, files, steps)
+        result = await run_in_threadpool(_run_guarded, run_workflow, files, steps)
+    except ServerBusy:
+        raise HTTPException(503, "The processing server is busy. Wait a moment and try again.") from None
     except ToolError as exc:
         raise HTTPException(400, str(exc)) from None
     except Exception:
@@ -311,6 +364,7 @@ async def run_workflow_endpoint(request: Request) -> Response:
 
 
 async def _first_upload(request: Request) -> bytes:
+    _check_content_length(request)
     try:
         form = await request.form()
     except Exception:
@@ -322,6 +376,7 @@ async def _first_upload(request: Request) -> bytes:
                 raise HTTPException(413, f"Uploads are capped at {MAX_UPLOAD_MB} MB.")
             if not _looks_like_pdf(data):
                 raise HTTPException(400, "The uploaded file does not have a PDF signature.")
+            _validate_page_count(getattr(value, "filename", None) or "This PDF", data)
             return data
     raise HTTPException(400, "Upload a PDF to inspect.")
 
@@ -333,7 +388,9 @@ async def inspect_form_fields(request: Request) -> dict:
     from apos_processing.tools.forms import list_form_fields
 
     try:
-        return {"fields": await run_in_threadpool(list_form_fields, data)}
+        return {"fields": await run_in_threadpool(_run_guarded, list_form_fields, data)}
+    except ServerBusy:
+        raise HTTPException(503, "The processing server is busy. Wait a moment and try again.") from None
     except ToolError as exc:
         raise HTTPException(400, str(exc)) from None
 
@@ -345,7 +402,9 @@ async def inspect_words(request: Request) -> dict:
     from apos_processing.tools.redact_auto import detect_word_boxes
 
     try:
-        return {"pages": await run_in_threadpool(detect_word_boxes, data)}
+        return {"pages": await run_in_threadpool(_run_guarded, detect_word_boxes, data)}
+    except ServerBusy:
+        raise HTTPException(503, "The processing server is busy. Wait a moment and try again.") from None
     except ToolError as exc:
         raise HTTPException(400, str(exc)) from None
     except ImportError:

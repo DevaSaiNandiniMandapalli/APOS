@@ -63,6 +63,26 @@ def test_unknown_tool_and_removed_batch_route_stay_not_found() -> None:
     assert asyncio.run(request("GET", "/api/v1/batches")).status_code == 404
 
 
+def test_rejects_a_request_whose_declared_body_exceeds_the_cap() -> None:
+    response = asyncio.run(request(
+        "POST",
+        "/api/v1/tools/rotate",
+        headers={"content-length": str(200 * 1024 * 1024)},
+    ))
+    assert response.status_code == 413
+    assert "Request bodies are capped" in response.json()["error"]
+
+
+def test_rejects_a_pdf_over_the_page_cap() -> None:
+    response = asyncio.run(request(
+        "POST",
+        "/api/v1/tools/rotate",
+        files=[("files", ("too-many-pages.pdf", pdf_bytes(501), "application/pdf"))],
+    ))
+    assert response.status_code == 413
+    assert "server limit is 500" in response.json()["error"]
+
+
 def test_supplied_client_aliases_are_available() -> None:
     assert asyncio.run(request("GET", "/healthz")).status_code == 200
     assert asyncio.run(request("GET", "/api/tools")).status_code == 200

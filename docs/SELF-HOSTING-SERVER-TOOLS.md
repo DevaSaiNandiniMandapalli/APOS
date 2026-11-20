@@ -2,7 +2,7 @@
 
 APOS has two processing modes:
 
-1. **Browser-local tools** — the 41 tools in the canonical studio registry. These never upload a document.
+1. **Browser-local tools** — the 43 tools in the canonical studio registry. These never upload a document.
 2. **Server tools** — the optional FastAPI service built from the supplied APOS/pdfsmith processing code. These tools run on your own server and are clearly labelled on `/server-tools`.
 
 The server is optional. Without it, the browser app and every browser-local tool continue to work; `/server-tools` explains how to connect one instead of exposing dead controls.
@@ -176,6 +176,9 @@ On the Windows development machine, 26 of 32 tools are available; `office_to_pdf
 | `APOS_MAX_UPLOAD_MB` | `50` | Per-request upload cap |
 | `APOS_MAX_FILES` | `20` | Files per request |
 | `APOS_MAX_OUTPUT_MB` | `100` | Generated output cap |
+| `APOS_MAX_PDF_PAGES` | `500` | Reject PDFs with more pages before processing |
+| `APOS_MAX_CONCURRENT` | `4` | Maximum simultaneous processing jobs per process |
+| `APOS_TRUST_X_FORWARDED_FOR` | `false` | Trust the first `X-Forwarded-For` value; enable only behind a proxy that strips it |
 | `APOS_RATE_LIMIT_REQUESTS` | `120` | Requests per window per client |
 | `APOS_RATE_LIMIT_WINDOW` | `60` | Rate-limit window in seconds |
 | `ANTHROPIC_API_KEY` | unset | Enables server AI summarize/translate |
@@ -200,8 +203,8 @@ Interactive API documentation is at `/api/docs`.
 - Uploaded bytes are held in memory. Tools that need an external binary write only to a per-request temporary directory that is removed before returning.
 - The API returns `Cache-Control: no-store` and sets defensive security headers.
 - File extensions are checked against content signatures before tools run.
-- Upload count, total bytes and output bytes are bounded.
-- A simple in-memory rate limiter applies to processing/inspection requests; it resets on process restart.
+- Upload count, total bytes, page count and output bytes are bounded; a bounded processing semaphore prevents unbounded concurrent jobs.
+- A simple in-memory rate limiter applies to processing/inspection requests; it resets on process restart. `X-Forwarded-For` is ignored unless `APOS_TRUST_X_FORWARDED_FOR=true` is set behind a trusted proxy.
 - Do not log document contents. APOS does not add such logging.
 - Temporary files and in-memory job state are lost on process restart. This is documented behaviour, not durable job processing.
 - Server processing is only appropriate when the operator and user trust the configured server. Browser-local tools remain the privacy-preserving default.
