@@ -62,6 +62,7 @@ backend/.venv/Scripts/python.exe -m pytest backend/tests
 - `docs/DOCUMENT-PASSPORT.md` documents the local fingerprint, privacy scan and clean-copy guarantees.
 - `docs/VERIFY-COMPARE.md` documents the local text/visual comparison, its tolerances and limits.
 - `docs/PDF-FORMS.md` documents local AcroForm filling, flattening and limits.
+- `docs/LOCAL-TESTING.md` is the step-by-step local and mobile test checklist.
 - Conversion quality is asserted structurally, not just "a file came out": `e2e/conversion-quality.spec.ts` reopens the generated DOCX and checks Word heading styles, a real `w:tbl` table with the source cell values, an embedded `word/media` picture, a page break and the body text, then extracts the text layer of the Word-to-PDF output with PDF.js. `e2e/ocr-searchable.spec.ts` runs the full OCR chain in a browser and asserts the searchable PDF's text layer.
 - Security headers, including a Content-Security-Policy, live in `public/_headers` and are copied into `out/` at build time. `scripts/serve-static.mjs` applies the same headers locally so Playwright exercises them.
 - The Cloudflare Worker in `worker/index.ts` is the only server code the static site needs. `/api/ai` checks the request origin, caps the body size and rate-limits each client IP (`AI_RATE_LIMIT`, `AI_RATE_WINDOW_SECONDS`, `ALLOWED_ORIGINS`).

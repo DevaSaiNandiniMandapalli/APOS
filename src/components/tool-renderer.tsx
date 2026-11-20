@@ -1,6 +1,6 @@
 "use client";
 
-import { Component, type ReactNode } from "react";
+import { Component, useEffect, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 
 const loading = () => <p className="privacy-note">Loading tool…</p>;
@@ -89,7 +89,14 @@ const TOOLS: Record<string, ToolEntry> = {
   "universal-converter": { pill: "Available · one box, every supported conversion", render: () => <UniversalConvert /> },
 };
 
-class ToolErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+const RELOAD_KEY_PREFIX = "apos-tool-reloaded:";
+
+function isChunkLoadError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /chunk|dynamically imported|importing|module script/i.test(message);
+}
+
+class ToolErrorBoundary extends Component<{ children: ReactNode; toolId: string }, { hasError: boolean }> {
   state = { hasError: false };
 
   static getDerivedStateFromError() {
@@ -98,14 +105,29 @@ class ToolErrorBoundary extends Component<{ children: ReactNode }, { hasError: b
 
   componentDidCatch(error: unknown) {
     console.error("[APOS Tool]", error);
+    if (!isChunkLoadError(error)) return;
+    // A deployment can replace hashed chunks while a page is still open.
+    // Reload once automatically to pick up the latest HTML and chunk names.
+    try {
+      const key = `${RELOAD_KEY_PREFIX}${this.props.toolId}`;
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, "1");
+        window.location.reload();
+      }
+    } catch {
+      // Storage can be unavailable in privacy modes; the button below still works.
+    }
   }
 
   render() {
     if (this.state.hasError) {
       return (
         <section className="planned-panel" role="alert">
-          <h2>This tool ran into a problem</h2>
-          <p>Please reload the page. Other tools are not affected.</p>
+          <h2>This tool did not load</h2>
+          <p>This can happen if the site was updated while the page was open. Reload the page to fetch the latest version. Other tools are not affected.</p>
+          <div className="merge-actions">
+            <button type="button" className="hero-cta" onClick={() => window.location.reload()}>Reload the page</button>
+          </div>
         </section>
       );
     }
@@ -115,6 +137,19 @@ class ToolErrorBoundary extends Component<{ children: ReactNode }, { hasError: b
 
 export default function ToolRenderer({ toolId, status }: { toolId: string; status: string }) {
   const entry = TOOLS[toolId];
+
+  useEffect(() => {
+    // Do not clear this immediately: a broken chunk would reload forever.
+    const timer = window.setTimeout(() => {
+      try {
+        sessionStorage.removeItem(`${RELOAD_KEY_PREFIX}${toolId}`);
+      } catch {
+        // Ignore storage failures.
+      }
+    }, 15000);
+    return () => window.clearTimeout(timer);
+  }, [toolId]);
+
   if (!entry) {
     const label = status === "in-development" ? "In Development" : "Planned";
     return (
@@ -127,7 +162,7 @@ export default function ToolRenderer({ toolId, status }: { toolId: string; statu
   }
 
   return (
-    <ToolErrorBoundary>
+    <ToolErrorBoundary toolId={toolId}>
       {entry.pill ? <div className="status-pill">{entry.pill}</div> : null}
       {entry.render()}
     </ToolErrorBoundary>
