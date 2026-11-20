@@ -72,12 +72,12 @@ export default function RouteHeader({ title, section }: { title: string; section
                 <Link key={tool.id} href={`/tools/${tool.id}`} onClick={closeMenus}>{tool.name}</Link>
               ))}
             </div>
-            <Link className="nav-panel-foot" href="/studios" onClick={closeMenus}>Browse every tool →</Link>
+            <Link className="nav-panel-foot" href="/tools" onClick={closeMenus}>Browse every tool →</Link>
           </div>
         </details>
 
         <Link className="primary-link" href="/faq">Answers</Link>
-        <Link className="primary-link" href="/studios">Directory</Link>
+        <Link className="primary-link" href="/tools">All tools</Link>
         <Link className="primary-link" href="/server-tools">Server tools</Link>
       </nav>
 
@@ -105,6 +105,7 @@ export default function RouteHeader({ title, section }: { title: string; section
           </div>
           <p className="nav-panel-title">Main</p>
           <Link href="/" onClick={closeMenus}>Overview</Link>
+          <Link href="/tools" onClick={closeMenus}>All tools</Link>
           <Link href="/studios" onClick={closeMenus}>All studios</Link>
           <Link href="/server-tools" onClick={closeMenus}>Server tools</Link>
           <Link href="/faq" onClick={closeMenus}>Questions &amp; answers</Link>

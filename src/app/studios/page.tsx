@@ -8,11 +8,11 @@ import StructuredData from "@/components/structured-data";
 import { breadcrumbSchema, directorySchema, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
-  title: "All studios and tools",
+  title: "All studios",
   description:
-    "Browse every APOS studio: PDF essentials, conversion, editor, organiser, security, repair and optimisation, images, OCR, documents, spreadsheets, presentations, AI, automation and utilities. Each tool states honestly whether it works today.",
+    "Browse the fifteen APOS studios: PDF essentials, conversion, editor, organiser, security, repair and optimisation, images, OCR, documents, spreadsheets, presentations, AI, automation and utilities. See how many tools in each studio work today.",
   path: "/studios",
-  keywords: ["PDF tool directory", "document tools list", "free PDF tools", "browser document tools"],
+  keywords: ["PDF studios", "document tool directory", "free PDF tools", "browser document tools"],
 });
 
 export default function StudiosPage() {
@@ -27,6 +27,7 @@ export default function StudiosPage() {
         Fifteen focused studios hold {toolDefinitions.length} tools, {ready} of which work today. Every tool shows its
         current status, so nothing here pretends to be finished when it is not.
       </p>
+      <p className="route-note"><Link className="text-link" href="/tools">Browse all {toolDefinitions.length} tools in one directory →</Link></p>
       <section className="studio-grid route-grid" aria-label="All product studios">
         {studioDefinitions.map((studio, i) => {
           const tools = toolDefinitions.filter((tool) => tool.studioId === studio.id);

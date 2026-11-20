@@ -35,6 +35,7 @@ export default function SiteFooter({ excludeStudio, excludeTool }: { excludeStud
         <nav className="site-footer-col" aria-label="Resources">
           <h2>Explore</h2>
           <div className="site-footer-links">
+            <div><Link href="/tools">All tools</Link></div>
             <div><Link href="/studios">All studios</Link></div>
             <div><Link href="/server-tools">Server tools</Link></div>
             <div><Link href="/faq">Questions &amp; answers</Link></div>

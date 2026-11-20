@@ -21,6 +21,9 @@ deployed separately.
    ```
 4. The Worker reads `worker/index.ts`; static assets come from `out/`. The CSP
    and security headers are in `public/_headers` and are copied into `out/`.
+   `npm run build` also normalizes the RSC prefetch filenames that Next.js 16
+   writes in a platform-specific layout on Windows, so the same `out/` works on
+   Cloudflare, Netlify, Vercel and Render.
 
 ### Optional processing server
 

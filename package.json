@@ -6,14 +6,15 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node scripts/fix-export-paths.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "lint": "eslint src worker",
-    "cf:build": "next build",
+    "cf:build": "npm run build",
     "cf:preview": "wrangler dev",
-    "cf:deploy": "next build && wrangler deploy",
+    "cf:deploy": "npm run build && wrangler deploy",
     "serve:static": "node scripts/serve-static.mjs"
   },
   "dependencies": {
