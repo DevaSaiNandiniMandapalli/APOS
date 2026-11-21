@@ -371,6 +371,7 @@ test("Exact positions keeps text lines and pictures at their original PDF coordi
   await page.goto("/tools/pdf-to-office");
   await page.getByLabel("Choose a file").setInputFiles({ name: "picture-layout.pdf", mimeType: "application/pdf", buffer: await pdfWithPicture() });
   await expect(page.getByRole("heading", { name: "Document preview" })).toBeVisible({ timeout: 20000 });
+  await page.getByLabel("Word mode").selectOption("positions");
   await expect(page.getByLabel("Word mode")).toHaveValue("positions");
   await page.getByRole("button", { name: "Convert PDF" }).click();
   await expect(page.locator(".merge-success")).toBeVisible({ timeout: 30000 });

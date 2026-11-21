@@ -48,8 +48,11 @@ Use any normal PDF with selectable text.
 - **PDF to Markdown** (`/tools/pdf-to-markdown`): choose a text PDF, download the
   `.md`, and confirm headings, paragraphs and tables are present.
 - **PDF to Office** (`/tools/pdf-to-office`):
+  - Reflowing Word (the default): headings, paragraphs, real tables, fonts, text
+    sizes and text colours should be preserved. Check the Word table columns and
+    cell styling.
   - Exact positions → Word: text and pictures should stay at their PDF positions.
-  - Reflowing Word: headings, paragraphs and tables should be editable.
+    Tables are positioned text in this mode; use Reflowing Word for real tables.
   - Excel: detected tables should become worksheets.
   - Visual Word: each page should be an image, not editable text.
   - Try a scanned PDF. The tool should stop with a clear OCR message rather than
@@ -101,7 +104,7 @@ To run a browser test against the deployed site instead of localhost:
 
 ```powershell
 $env:PLAYWRIGHT_BASE_URL = "https://apos.nxtgensec.org"
-npx playwright test e2e/pdf-conversion-studio.spec.ts -g "PDF to Office" --workers=1
+npx playwright test e2e/pdf-conversion-studio.spec.ts e2e/pdf-office-fidelity.spec.ts -g "PDF to Office|colour|fidelity" --workers=1
 Remove-Item Env:PLAYWRIGHT_BASE_URL
 ```
 

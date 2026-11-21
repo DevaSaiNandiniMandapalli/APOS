@@ -246,9 +246,9 @@ export function readDocxBlocks(bytes: Uint8Array): DocBlock[] {
 }
 
 /** A formatted run inside a Word paragraph. */
-export type DocRun = { text: string; bold?: boolean; italic?: boolean; size?: number; color?: string };
+export type DocRun = { text: string; bold?: boolean; italic?: boolean; size?: number; color?: string; font?: string };
 
-export type RichTableCell = { text: string; fill?: string; bold?: boolean; color?: string };
+export type RichTableCell = { text: string; fill?: string; bold?: boolean; italic?: boolean; size?: number; color?: string; font?: string };
 
 export type RichDocBlock =
   | {
@@ -452,15 +452,16 @@ export type DocxRun = {
   italic?: boolean;
   size?: number;
   color?: string;
+  font?: string;
 };
 
 export type DocxContentBlock =
-  | { kind: "heading"; text: string; level: 1 | 2 | 3; alignment?: "left" | "center" | "right"; bold?: boolean; italic?: boolean; indent?: number; runs?: DocxRun[]; ruleBelow?: boolean }
-  | { kind: "paragraph"; text: string; alignment?: "left" | "center" | "right" | "justify"; fontSize?: number; color?: string; bold?: boolean; italic?: boolean; indent?: number; spaceBefore?: number; spaceAfter?: number; runs?: DocxRun[] }
-  | { kind: "list"; text: string; indent?: number; runs?: DocxRun[]; ordered?: boolean }
-  | { kind: "table"; rows: string[][]; header?: boolean; bordered?: boolean }
+  | { kind: "heading"; text: string; level: 1 | 2 | 3; alignment?: "left" | "center" | "right"; bold?: boolean; italic?: boolean; indent?: number; fontSize?: number; color?: string; font?: string; runs?: DocxRun[]; ruleBelow?: boolean }
+  | { kind: "paragraph"; text: string; alignment?: "left" | "center" | "right" | "justify"; fontSize?: number; color?: string; font?: string; bold?: boolean; italic?: boolean; indent?: number; spaceBefore?: number; spaceAfter?: number; runs?: DocxRun[] }
+  | { kind: "list"; text: string; indent?: number; fontSize?: number; color?: string; font?: string; runs?: DocxRun[]; ordered?: boolean }
+  | { kind: "table"; rows: Array<Array<string | RichTableCell>>; header?: boolean; bordered?: boolean; columnWidths?: number[] }
   | { kind: "image"; bytes: Uint8Array; format: "png" | "jpeg"; width: number; height: number; maxWidth?: number; maxHeight?: number; alt?: string; anchor?: { x: number; y: number; width: number; height: number; pageWidth: number; pageHeight: number; behindText?: boolean } }
-  | { kind: "positionedText"; text: string; x: number; top: number; width: number; fontSize: number; bold?: boolean; italic?: boolean; font?: string }
+  | { kind: "positionedText"; text: string; x: number; top: number; width: number; fontSize: number; bold?: boolean; italic?: boolean; font?: string; color?: string }
   | { kind: "pageBreak" }
   | { kind: "sectionBreak"; pageWidth: number; pageHeight: number };
 
@@ -479,6 +480,7 @@ function docxParagraph(
     bold?: boolean;
     italic?: boolean;
     color?: string;
+    font?: string;
     indent?: number;
     spaceBefore?: number;
     spaceAfter?: number;
@@ -502,7 +504,9 @@ function docxParagraph(
     ? `<w:pPr>${style}${numbering}${border}${spacing}${alignment}${indent}</w:pPr>`
     : "";
   const runProperties = (run: DocxRun) => {
+    const font = run.font ? wordFontFamily(run.font) : "";
     const props = [
+      font ? `<w:rFonts w:ascii="${xmlEscape(font)}" w:hAnsi="${xmlEscape(font)}" w:eastAsia="${xmlEscape(font)}" w:cs="${xmlEscape(font)}"/>` : "",
       run.bold ? "<w:b/>" : "",
       run.italic ? "<w:i/>" : "",
       run.size ? `<w:sz w:val="${Math.max(2, Math.round(run.size * 2))}"/><w:szCs w:val="${Math.max(2, Math.round(run.size * 2))}"/>` : "",
@@ -512,7 +516,7 @@ function docxParagraph(
   };
   const sourceRuns = options.runs?.length
     ? options.runs
-    : [{ text, bold: options.bold, italic: options.italic, size: options.size, color: options.color }];
+    : [{ text, bold: options.bold, italic: options.italic, size: options.size, color: options.color, font: options.font }];
   const runs = sourceRuns.map((run) => {
     const parts = run.text.replace(/\r\n?/g, "\n").split("\n");
     return parts.map((part, index) =>
@@ -529,13 +533,25 @@ function docxSectionProperties(pageWidth: number, pageHeight: number) {
 }
 
 function wordFontFamily(family: string | undefined) {
-  const name = family ?? "";
+  const raw = (family ?? "").split(",")[0].replace(/["']/g, "").replace(/^[A-Z]{6}\+/, "").trim();
+  const name = raw.replace(/[-_ ]?(?:bold|italic|oblique|regular|medium|light|semibold|demibold|black|heavy)\b.*$/i, "").trim() || raw;
   if (/mono|courier|consolas|menlo/i.test(name)) return "Courier New";
   if (/calibri|carlito/i.test(name)) return "Calibri";
   if (/cambria|caladea/i.test(name)) return "Cambria";
-  if (/georgia|times|garamond|palatino|book antiqua|serif/i.test(name) && !/sans/i.test(name)) return "Times New Roman";
+  if (/helvetica|arial|liberation sans/i.test(name)) return "Arial";
+  if (/georgia/i.test(name)) return "Georgia";
+  if (/times|liberation serif/i.test(name)) return "Times New Roman";
+  if (/garamond/i.test(name)) return "Garamond";
+  if (/palatino|book antiqua/i.test(name)) return "Palatino Linotype";
   if (/verdana/i.test(name)) return "Verdana";
   if (/tahoma/i.test(name)) return "Tahoma";
+  if (/trebuchet/i.test(name)) return "Trebuchet MS";
+  if (/segoe ui/i.test(name)) return "Segoe UI";
+  if (/^serif$/i.test(name)) return "Times New Roman";
+  if (/^(?:sans-serif|sans|system-ui)$/i.test(name)) return "Arial";
+  // Preserve a real family name so Word can use it when installed. The
+  // attribute is escaped by the caller; reject PDF internal names.
+  if (/^[A-Za-z0-9][A-Za-z0-9 .&+-]{1,39}$/.test(name) && !/^g_\d+_f\d+$/i.test(name)) return name;
   return "Arial";
 }
 
@@ -547,31 +563,42 @@ function docxPositionedParagraph(block: Extract<DocxContentBlock, { kind: "posit
   const height = Math.max(120, Math.round((block.fontSize * 1.45 + 2) * 20));
   const halfPoints = Math.max(2, Math.round(block.fontSize * 2));
   const runProperties = [
-    `<w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:eastAsia="${font}" w:cs="${font}"/>`,
+    `<w:rFonts w:ascii="${xmlEscape(font)}" w:hAnsi="${xmlEscape(font)}" w:eastAsia="${xmlEscape(font)}" w:cs="${xmlEscape(font)}"/>`,
     block.bold ? "<w:b/><w:bCs/>" : "",
     block.italic ? "<w:i/><w:iCs/>" : "",
     `<w:sz w:val="${halfPoints}"/><w:szCs w:val="${halfPoints}"/>`,
+    block.color ? `<w:color w:val="${block.color.replace(/[^0-9a-f]/gi, "").slice(0, 6) || "000000"}"/>` : "",
   ].join("");
   const frame = `<w:framePr w:w="${width}" w:h="${height}" w:x="${x}" w:y="${top}" w:hAnchor="page" w:vAnchor="page" w:wrap="none" w:hRule="atLeast"/>`;
   const paragraph = '<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:ind w:left="0" w:right="0" w:firstLine="0"/><w:jc w:val="left"/>';
   return `<w:p><w:pPr>${frame}${paragraph}</w:pPr><w:r><w:rPr>${runProperties}</w:rPr><w:t xml:space="preserve">${xmlEscape(block.text)}</w:t></w:r></w:p>`;
 }
 
-function docxTable(rows: string[][], header: boolean, bordered = false) {
+function docxTable(rows: Array<Array<string | RichTableCell>>, header: boolean, bordered = false, columnWidths?: number[]) {
   const cleanRows = rows
-    .map((row) => row.map((cell) => String(cell ?? "")))
+    .map((row) => row.map((cell) => typeof cell === "string" ? { text: String(cell ?? "") } : { ...cell, text: String(cell.text ?? "") }))
     .filter((row) => row.length > 0);
   if (!cleanRows.length) return "";
   const columns = Math.min(20, cleanRows.reduce((max, row) => Math.max(max, row.length), 1));
   const width = 9360;
-  // Size columns by their longest cell so a date column stays narrow instead of
-  // taking half the page.
-  const weights = Array.from({ length: columns }, (_, index) => {
-    const longest = cleanRows.reduce((max, row) => Math.max(max, (row[index] ?? "").length), 1);
-    return Math.min(70, Math.max(4, longest));
-  });
-  const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
-  const widths = weights.map((value) => Math.max(600, Math.round((value / totalWeight) * width)));
+  // Prefer the column geometry measured from the PDF. Fall back to text length
+  // when the source does not expose reliable cell positions.
+  const measured = columnWidths
+    ?.slice(0, columns)
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  let widths: number[];
+  if (measured && measured.length === columns && measured.length > 0) {
+    const total = measured.reduce((sum, value) => sum + value, 0) || 1;
+    widths = measured.map((value) => Math.max(560, Math.round((value / total) * width)));
+  } else {
+    const weights = Array.from({ length: columns }, (_, index) => {
+      const longest = cleanRows.reduce((max, row) => Math.max(max, String(row[index]?.text ?? "").length), 1);
+      return Math.min(70, Math.max(4, longest));
+    });
+    const totalWeight = weights.reduce((sum, value) => sum + value, 0) || 1;
+    widths = weights.map((value) => Math.max(600, Math.round((value / totalWeight) * width)));
+  }
   // A PDF table only has visible borders when the source drew them. Inventing
   // a grid adds lines the original document never had.
   const border = bordered
@@ -580,11 +607,15 @@ function docxTable(rows: string[][], header: boolean, bordered = false) {
   const grid = `<w:tblGrid>${widths.map((value) => `<w:gridCol w:w="${value}"/>`).join("")}</w:tblGrid>`;
   const body = cleanRows.map((row, rowIndex) => {
     const cells = Array.from({ length: columns }, (_, index) => {
-      const value = row[index] ?? "";
-      const paragraph = value
-        ? docxParagraph(value, { size: 9, bold: header && rowIndex === 0 })
+      const cell = row[index] ?? { text: "" };
+      const isHeader = header && rowIndex === 0;
+      const paragraph = cell.text
+        ? docxParagraph(cell.text, { size: cell.size ?? 9, bold: isHeader || cell.bold, italic: cell.italic, color: cell.color, font: cell.font })
         : "<w:p/>";
-      return `<w:tc><w:tcPr><w:tcW w:w="${widths[index]}" w:type="dxa"/></w:tcPr>${paragraph}</w:tc>`;
+      const fill = cell.fill && /^[0-9a-f]{6}$/i.test(cell.fill)
+        ? `<w:shd w:val="clear" w:color="auto" w:fill="${cell.fill.toUpperCase()}"/>`
+        : "";
+      return `<w:tc><w:tcPr><w:tcW w:w="${widths[index]}" w:type="dxa"/>${fill}<w:vAlign w:val="center"/></w:tcPr>${paragraph}</w:tc>`;
     }).join("");
     return `<w:tr>${cells}</w:tr>`;
   }).join("");
@@ -604,15 +635,15 @@ export function buildDocxDocument(
 
   for (const block of blocks) {
     if (block.kind === "heading") {
-      const size = block.level === 1 ? 20 : block.level === 2 ? 16 : 13;
-      content.push(docxParagraph(block.text, { size, bold: true, alignment: block.alignment, indent: block.indent, styleId: `Heading${block.level}` as "Heading1" | "Heading2" | "Heading3", runs: block.runs, ruleBelow: block.ruleBelow }));
+      const size = block.fontSize ?? (block.level === 1 ? 20 : block.level === 2 ? 16 : 13);
+      content.push(docxParagraph(block.text, { size, bold: block.bold ?? true, italic: block.italic, color: block.color, font: block.font, alignment: block.alignment, indent: block.indent, styleId: `Heading${block.level}` as "Heading1" | "Heading2" | "Heading3", runs: block.runs, ruleBelow: block.ruleBelow }));
     } else if (block.kind === "paragraph") {
-      content.push(docxParagraph(block.text, { alignment: block.alignment, size: block.fontSize, color: block.color, bold: block.bold, italic: block.italic, indent: block.indent, spaceBefore: block.spaceBefore, spaceAfter: block.spaceAfter, runs: block.runs }));
+      content.push(docxParagraph(block.text, { alignment: block.alignment, size: block.fontSize, color: block.color, font: block.font, bold: block.bold, italic: block.italic, indent: block.indent, spaceBefore: block.spaceBefore, spaceAfter: block.spaceAfter, runs: block.runs }));
     } else if (block.kind === "list") {
       const { text, ordered } = splitListMarker(block.text);
-      content.push(docxParagraph(text, { numbering: ordered || block.ordered ? 2 : 1, runs: block.runs }));
+      content.push(docxParagraph(text, { numbering: ordered || block.ordered ? 2 : 1, size: block.fontSize, color: block.color, font: block.font, runs: block.runs }));
     } else if (block.kind === "table") {
-      content.push(docxTable(block.rows, block.header !== false, block.bordered === true));
+      content.push(docxTable(block.rows, block.header !== false, block.bordered === true, block.columnWidths));
       content.push("<w:p/>");
     } else if (block.kind === "positionedText") {
       content.push(docxPositionedParagraph(block));

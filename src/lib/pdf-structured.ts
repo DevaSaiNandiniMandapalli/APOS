@@ -12,9 +12,19 @@ export type PdfRawTextItem = {
   bold?: boolean;
   italic?: boolean;
   fontFamily?: string;
+  color?: string;
 };
 
-export type PdfLineCell = { text: string; x: number; width: number };
+export type PdfLineCell = {
+  text: string;
+  x: number;
+  width: number;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  fontSize?: number;
+  fontFamily?: string;
+};
 
 export type PdfLine = {
   text: string;
@@ -26,7 +36,17 @@ export type PdfLine = {
   italic: boolean;
   fontName: string;
   fontFamily?: string;
+  color?: string;
   cells: PdfLineCell[];
+};
+
+export type PdfTableCell = {
+  text: string;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  fontSize?: number;
+  fontFamily?: string;
 };
 
 export type PdfTable = {
@@ -38,6 +58,8 @@ export type PdfTable = {
   width: number;
   height: number;
   bordered?: boolean;
+  richRows?: PdfTableCell[][];
+  columnWidths?: number[];
 };
 
 export type PdfTextBlock = {
@@ -51,7 +73,19 @@ export type PdfTextBlock = {
   italic?: boolean;
   indent?: number;
   fontSize?: number;
+  fontFamily?: string;
+  color?: string;
+  spans?: PdfTextSpan[];
   ruleBelow?: boolean;
+};
+
+export type PdfTextSpan = {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  fontSize?: number;
+  fontFamily?: string;
+  color?: string;
 };
 
 export type PdfPageBlock = PdfTextBlock | { kind: "table"; table: PdfTable; y: number };
@@ -138,6 +172,7 @@ export function groupTextLines(items: readonly PdfRawTextItem[]): PdfLine[] {
     const sizes: Array<{ size: number; weight: number }> = [];
     const fontWeights = new Map<string, number>();
     const familyWeights = new Map<string, number>();
+    const colorWeights = new Map<string, number>();
     let boldWeight = 0;
     let italicWeight = 0;
 
@@ -161,6 +196,7 @@ export function groupTextLines(items: readonly PdfRawTextItem[]): PdfLine[] {
       const fontName = item.fontName ?? "";
       fontWeights.set(fontName, (fontWeights.get(fontName) ?? 0) + value.length);
       if (item.fontFamily) familyWeights.set(item.fontFamily, (familyWeights.get(item.fontFamily) ?? 0) + value.length);
+      if (item.color) colorWeights.set(item.color, (colorWeights.get(item.color) ?? 0) + value.length);
       if (item.bold || isBoldFont(fontName)) boldWeight += value.length;
       if (item.italic || isItalicFont(fontName)) italicWeight += value.length;
     }
@@ -170,29 +206,71 @@ export function groupTextLines(items: readonly PdfRawTextItem[]): PdfLine[] {
     const fontSize = sizes.reduce((total, entry) => total + entry.size * entry.weight, 0) / totalSizeWeight;
     const fontName = [...fontWeights.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? "";
     const fontFamily = [...familyWeights.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? "";
+    const color = [...colorWeights.entries()].sort((left, right) => right[1] - left[1])[0]?.[0];
 
     const cells: PdfLineCell[] = [];
     let cellText = "";
     let cellStart = ordered[0]?.x ?? 0;
     let cellEnd = cellStart;
     let cellPreviousEnd: number | null = null;
+    let cellChars = 0;
+    let cellBold = 0;
+    let cellItalic = 0;
+    let cellSizes: Array<{ size: number; weight: number }> = [];
+    let cellFamilies = new Map<string, number>();
+    let cellColors = new Map<string, number>();
+
+    const addCellStyle = (item: PdfRawTextItem, value: string) => {
+      const weight = Math.max(1, value.length);
+      cellChars += weight;
+      cellSizes.push({ size: item.fontSize, weight });
+      if (item.fontFamily) cellFamilies.set(item.fontFamily, (cellFamilies.get(item.fontFamily) ?? 0) + weight);
+      if (item.color) cellColors.set(item.color, (cellColors.get(item.color) ?? 0) + weight);
+      if (item.bold || isBoldFont(item.fontName ?? "")) cellBold += weight;
+      if (item.italic || isItalicFont(item.fontName ?? "")) cellItalic += weight;
+    };
+
+    const pushCell = () => {
+      const value = cellText.trim();
+      if (!value) return;
+      const weight = cellSizes.reduce((total, entry) => total + entry.weight, 0) || 1;
+      cells.push({
+        text: value,
+        x: cellStart,
+        width: Math.max(1, cellEnd - cellStart),
+        color: [...cellColors.entries()].sort((left, right) => right[1] - left[1])[0]?.[0],
+        bold: cellBold / Math.max(1, cellChars) >= 0.5,
+        italic: cellItalic / Math.max(1, cellChars) >= 0.5,
+        fontSize: cellSizes.reduce((total, entry) => total + entry.size * entry.weight, 0) / weight,
+        fontFamily: [...cellFamilies.entries()].sort((left, right) => right[1] - left[1])[0]?.[0],
+      });
+    };
+
     for (const item of ordered) {
       const value = item.str.replace(/\s+/g, " ").trim();
       if (!value) continue;
       const gap = cellPreviousEnd === null ? 0 : item.x - cellPreviousEnd;
       const threshold = Math.max(8, item.fontSize * 1.25);
       if (cellText && (item.str.startsWith(" ") || gap > threshold)) {
-        cells.push({ text: cellText.trim(), x: cellStart, width: Math.max(1, cellEnd - cellStart) });
+        pushCell();
         cellText = value;
         cellStart = item.x;
         cellEnd = item.x + item.width;
+        cellChars = 0;
+        cellBold = 0;
+        cellItalic = 0;
+        cellSizes = [];
+        cellFamilies = new Map();
+        cellColors = new Map();
+        addCellStyle(item, value);
       } else {
         cellText = cellText ? `${cellText} ${value}` : value;
         cellEnd = Math.max(cellEnd, item.x + item.width);
+        addCellStyle(item, value);
       }
       cellPreviousEnd = item.x + item.width;
     }
-    if (cellText.trim()) cells.push({ text: cellText.trim(), x: cellStart, width: Math.max(1, cellEnd - cellStart) });
+    pushCell();
 
     return {
       text: text.replace(/\s+/g, " ").trim(),
@@ -204,6 +282,7 @@ export function groupTextLines(items: readonly PdfRawTextItem[]): PdfLine[] {
       italic: italicWeight / totalLetters >= 0.5,
       fontName,
       fontFamily,
+      color,
       cells,
     };
   }).filter((line) => line.text.length > 0);
@@ -233,9 +312,11 @@ function buildTable(lines: PdfLine[], pageWidth: number, pageHeight: number): Pd
   if (columns.length < 2 || columns.length > 24) return null;
 
   const rows: string[][] = [];
+  const richRows: PdfTableCell[][] = [];
   let populatedRows = 0;
   for (const line of lines) {
     const row = Array.from({ length: columns.length }, () => "");
+    const richRow: PdfTableCell[] = Array.from({ length: columns.length }, () => ({ text: "" }));
     let populated = 0;
     for (const cell of line.cells) {
       let best = -1;
@@ -246,10 +327,20 @@ function buildTable(lines: PdfLine[], pageWidth: number, pageHeight: number): Pd
       });
       if (best >= 0 && bestDistance <= Math.max(tolerance * 2.2, cell.width + tolerance)) {
         row[best] = row[best] ? `${row[best]} ${cell.text}` : cell.text;
+        const existing = richRow[best];
+        richRow[best] = {
+          text: existing.text ? `${existing.text} ${cell.text}` : cell.text,
+          color: existing.color ?? cell.color,
+          bold: existing.bold || cell.bold,
+          italic: existing.italic || cell.italic,
+          fontSize: existing.fontSize ?? cell.fontSize,
+          fontFamily: existing.fontFamily ?? cell.fontFamily,
+        };
         populated += 1;
       }
     }
     rows.push(row.map((value) => value.replace(/\s+/g, " ").trim()));
+    richRows.push(richRow.map((cell) => ({ ...cell, text: cell.text.replace(/\s+/g, " ").trim() })));
     if (populated >= 2) populatedRows += 1;
   }
 
@@ -265,6 +356,14 @@ function buildTable(lines: PdfLine[], pageWidth: number, pageHeight: number): Pd
   const height = Math.max(1, first.y + first.fontSize - last.y + last.fontSize);
   if (width < pageWidth * 0.12 || height > pageHeight * 0.98) return null;
 
+  const orderedColumns = [...columns].sort((leftColumn, rightColumn) => leftColumn.center - rightColumn.center);
+  const edges = [left];
+  for (let index = 1; index < orderedColumns.length; index += 1) {
+    edges.push(Math.max(edges[index - 1] + 1, Math.min(orderedColumns[index].left, right - 1)));
+  }
+  edges.push(right);
+  const columnWidths = edges.slice(1).map((edge, index) => Math.max(1, edge - edges[index]));
+
   return {
     rows,
     header: first.bold || rows[0].every((value) => value.length > 0) && rows[0].every((value) => value === value.toUpperCase()),
@@ -273,6 +372,8 @@ function buildTable(lines: PdfLine[], pageWidth: number, pageHeight: number): Pd
     y: first.y,
     width,
     height,
+    richRows,
+    columnWidths,
   };
 }
 
@@ -353,6 +454,15 @@ export function buildTextBlocks(lines: readonly PdfLine[], pageWidth: number, ru
     current = null;
   };
 
+  const spanForLine = (line: PdfLine, text = line.text): PdfTextSpan => ({
+    text,
+    bold: line.bold,
+    italic: line.italic,
+    fontSize: line.fontSize,
+    fontFamily: line.fontFamily,
+    color: line.color,
+  });
+
   for (const line of lines) {
     const level = headingFor(line, bodySize);
     if (level) {
@@ -371,6 +481,9 @@ export function buildTextBlocks(lines: readonly PdfLine[], pageWidth: number, ru
         italic: line.italic,
         indent: Math.max(0, line.x),
         fontSize: line.fontSize,
+        fontFamily: line.fontFamily,
+        color: line.color,
+        spans: [spanForLine(line)],
         ruleBelow,
       });
       lastLine = line;
@@ -421,6 +534,9 @@ export function buildTextBlocks(lines: readonly PdfLine[], pageWidth: number, ru
         italic: line.italic,
         indent: Math.max(0, line.x),
         fontSize: line.fontSize,
+        fontFamily: line.fontFamily,
+        color: line.color,
+        spans: [spanForLine(line)],
       };
       lastLine = line;
       lastLineY = line.y;
@@ -428,8 +544,15 @@ export function buildTextBlocks(lines: readonly PdfLine[], pageWidth: number, ru
       continue;
     }
 
-    if (current!.text.endsWith("-") && /^[a-z]/.test(line.text)) current!.text = `${current!.text.slice(0, -1)}${line.text}`;
-    else current!.text = `${current!.text} ${line.text}`;
+    if (current!.text.endsWith("-") && /^[a-z]/.test(line.text)) {
+      current!.text = `${current!.text.slice(0, -1)}${line.text}`;
+      const spans = current!.spans ?? [];
+      const previousSpan = spans[spans.length - 1];
+      if (previousSpan) previousSpan.text = `${previousSpan.text.replace(/-$/, "")}${line.text}`;
+    } else {
+      current!.text = `${current!.text} ${line.text}`;
+      current!.spans = [...(current!.spans ?? []), spanForLine(line)];
+    }
     current!.lines.push(line.text);
     lastLine = line;
     lastLineY = line.y;
@@ -715,9 +838,11 @@ export function normalisePageTextItems(
   items: readonly unknown[],
   viewport: { transform: number[]; height: number },
   fontStyles?: ReadonlyMap<string, PdfFontStyle>,
+  itemColors?: readonly (string | undefined)[],
 ): PdfRawTextItem[] {
   const output: PdfRawTextItem[] = [];
-  for (const candidate of items) {
+  for (let index = 0; index < items.length; index += 1) {
+    const candidate = items[index];
     const item = candidate as {
       str?: string;
       transform?: number[];
@@ -742,9 +867,125 @@ export function normalisePageTextItems(
       bold: style?.bold,
       italic: style?.italic,
       fontFamily: style?.family,
+      color: itemColors?.[index],
     });
   }
   return output;
+}
+
+function hexColor(red: number, green: number, blue: number): string {
+  const channel = (value: number) => Math.max(0, Math.min(255, Math.round(value * 255))).toString(16).padStart(2, "0");
+  return `${channel(red)}${channel(green)}${channel(blue)}`.toUpperCase();
+}
+
+function fillColorFromOperator(pdfjs: PdfJsModule, op: number, args: readonly unknown[]): string | undefined {
+  const values = Array.isArray(args[0]) ? args[0] as number[] : args as number[];
+  if (op === pdfjs.OPS.setFillRGBColor) {
+    const value = args[0];
+    if (typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value)) return value.slice(1).toUpperCase();
+    if (values.length >= 3 && values.slice(0, 3).every((item) => Number.isFinite(Number(item)))) {
+      return hexColor(Number(values[0]), Number(values[1]), Number(values[2]));
+    }
+  }
+  if (op === pdfjs.OPS.setFillGray) {
+    const gray = Number(args[0]);
+    if (Number.isFinite(gray)) return hexColor(gray, gray, gray);
+  }
+  if (op === pdfjs.OPS.setFillCMYKColor) {
+    const [c, m, y, k] = values.map(Number);
+    if ([c, m, y, k].every(Number.isFinite)) {
+      return hexColor((1 - Math.min(1, c + k)), (1 - Math.min(1, m + k)), (1 - Math.min(1, y + k)));
+    }
+  }
+  if (op === pdfjs.OPS.setFillColor || op === pdfjs.OPS.setFillColorN) {
+    const components = values.filter((value) => Number.isFinite(Number(value))).map(Number);
+    if (components.length === 1) return hexColor(components[0], components[0], components[0]);
+    if (components.length >= 3) return hexColor(components[0], components[1], components[2]);
+    if (components.length === 4) {
+      const [c, m, y, k] = components;
+      return hexColor(1 - Math.min(1, c + k), 1 - Math.min(1, m + k), 1 - Math.min(1, y + k));
+    }
+  }
+  return undefined;
+}
+
+function glyphText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return value.map(glyphText).join("");
+  if (value && typeof value === "object" && "unicode" in value) {
+    const unicode = (value as { unicode?: unknown }).unicode;
+    return typeof unicode === "string" ? unicode : "";
+  }
+  return "";
+}
+
+/**
+ * PDF.js text items do not expose fill colour. The operator list does: every
+ * show-text operation runs after a fill-colour operator. Build colour runs and
+ * map them onto text items by character position, preserving black as the
+ * default so ordinary documents stay unchanged.
+ */
+export function detectTextItemColors(
+  pdfjs: PdfJsModule,
+  operatorList: { fnArray: readonly number[]; argsArray: readonly unknown[] },
+  items: readonly unknown[],
+): (string | undefined)[] {
+  const { fnArray, argsArray } = operatorList;
+  if (!Array.isArray(fnArray) || !Array.isArray(argsArray)) return [];
+  const showOps = new Set([pdfjs.OPS.showText, pdfjs.OPS.showSpacedText, pdfjs.OPS.nextLineShowText, pdfjs.OPS.nextLineSetSpacingShowText].filter((op) => typeof op === "number"));
+  const colorStack: string[] = [];
+  const runs: Array<{ color: string; text: string }> = [];
+  let current = "000000";
+  for (let index = 0; index < fnArray.length; index += 1) {
+    const op = fnArray[index];
+    const args = argsArray[index] as readonly unknown[];
+    if (op === pdfjs.OPS.save) {
+      colorStack.push(current);
+      continue;
+    }
+    if (op === pdfjs.OPS.restore) {
+      current = colorStack.pop() ?? "000000";
+      continue;
+    }
+    const color = fillColorFromOperator(pdfjs, op, Array.isArray(args) ? args : []);
+    if (color) {
+      current = color;
+      continue;
+    }
+    if (!showOps.has(op)) continue;
+    const text = glyphText(args?.[0]);
+    if (text) runs.push({ color: current, text });
+  }
+  if (!runs.length) return [];
+  const activeRuns = runs.filter((run) => run.text.length > 0);
+  if (!activeRuns.length) return [];
+  let runIndex = 0;
+  let runRemaining = activeRuns[0].text.length;
+  const colors: (string | undefined)[] = [];
+  for (const candidate of items) {
+    const text = (candidate as { str?: unknown }).str;
+    if (typeof text !== "string" || !text.trim()) {
+      colors.push(undefined);
+      continue;
+    }
+    let remaining = text.length;
+    const weights = new Map<string, number>();
+    while (remaining > 0 && runIndex < activeRuns.length) {
+      if (runRemaining <= 0) {
+        runIndex += 1;
+        runRemaining = activeRuns[runIndex]?.text.length ?? 0;
+        continue;
+      }
+      const take = Math.min(remaining, runRemaining);
+      const color = activeRuns[runIndex].color;
+      weights.set(color, (weights.get(color) ?? 0) + take);
+      remaining -= take;
+      runRemaining -= take;
+    }
+    const dominant = [...weights.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? activeRuns[activeRuns.length - 1].color;
+    colors.push(dominant === "000000" ? undefined : dominant);
+  }
+  return colors;
 }
 
 export async function extractPdfStructure(
@@ -805,18 +1046,20 @@ export async function extractPdfStructure(
         const viewport = page.getViewport({ scale: 1 });
         const content = await page.getTextContent();
         let fontStyles: Map<string, PdfFontStyle> | undefined;
+        let itemColors: (string | undefined)[] = [];
         let rules: number[] = [];
         let verticalRules: { x: number; y0: number; y1: number }[] = [];
         try {
           const operatorList = await page.getOperatorList();
           const list = operatorList as unknown as { fnArray: readonly number[]; argsArray: readonly unknown[] };
           fontStyles = resolvePdfFontStyles(page, Object.keys(content.styles));
+          itemColors = detectTextItemColors(pdfjs, list, content.items as unknown[]);
           rules = detectHorizontalRules(pdfjs, list, viewport);
           verticalRules = detectVerticalRules(pdfjs, list);
         } catch {
           // Some damaged pages cannot provide an operator list; text still works.
         }
-        const raw = normalisePageTextItems(pdfjs, content.items as unknown[], viewport, fontStyles);
+        const raw = normalisePageTextItems(pdfjs, content.items as unknown[], viewport, fontStyles, itemColors);
         const structure = buildPdfPageStructure(raw, viewport.width, viewport.height, pageNumber, rules, verticalRules);
         pages.push(structure);
         if (structure.empty) emptyPages.push(pageNumber);

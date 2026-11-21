@@ -102,6 +102,14 @@ type PositionedBlock = { y: number; order: number; block: DocxContentBlock };
 
 function textBlockToDocx(block: Exclude<PdfPageBlock, { kind: "table" }>): DocxContentBlock {
   const indent = block.indent ? Math.round(block.indent * 20) : undefined;
+  const runs = block.spans?.map((span, index) => ({
+    text: `${index ? " " : ""}${span.text}`,
+    bold: span.bold,
+    italic: span.italic,
+    size: span.fontSize,
+    color: span.color,
+    font: span.fontFamily,
+  }));
   if (block.kind === "heading") {
     return {
       kind: "heading",
@@ -109,12 +117,17 @@ function textBlockToDocx(block: Exclude<PdfPageBlock, { kind: "table" }>): DocxC
       level: block.level ?? 2,
       alignment: block.alignment,
       indent,
-      bold: true,
+      bold: block.bold,
+      italic: block.italic,
+      fontSize: block.fontSize,
+      font: block.fontFamily,
+      color: block.color,
+      runs,
       ruleBelow: block.ruleBelow,
     };
   }
   if (block.kind === "list") {
-    return { kind: "list", text: block.text, indent: indent ?? 360 };
+    return { kind: "list", text: block.text, indent: indent ?? 360, fontSize: block.fontSize, font: block.fontFamily, color: block.color };
   }
   return {
     kind: "paragraph",
@@ -124,6 +137,9 @@ function textBlockToDocx(block: Exclude<PdfPageBlock, { kind: "table" }>): DocxC
     bold: block.bold,
     italic: block.italic,
     fontSize: block.fontSize,
+    font: block.fontFamily,
+    color: block.color,
+    runs,
   };
 }
 
@@ -141,7 +157,20 @@ function positionedPageBlocks(
         positioned.push({
           y: block.y,
           order: order++,
-          block: { kind: "table", rows: block.table.rows, header: block.table.header, bordered: block.table.bordered },
+          block: {
+            kind: "table",
+            rows: block.table.richRows?.map((row) => row.map((cell) => ({
+              text: cell.text,
+              bold: cell.bold,
+              italic: cell.italic,
+              size: cell.fontSize,
+              color: cell.color,
+              font: cell.fontFamily,
+            }))) ?? block.table.rows,
+            header: block.table.header,
+            bordered: block.table.bordered,
+            columnWidths: block.table.columnWidths,
+          },
         });
       } else {
         positioned.push({
@@ -486,6 +515,7 @@ async function buildPositionedWord(
         bold: line.bold,
         italic: line.italic,
         font: line.fontFamily || line.fontName,
+        color: line.color,
       });
       textLines += 1;
     }

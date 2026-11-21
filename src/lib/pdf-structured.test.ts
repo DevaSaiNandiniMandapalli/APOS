@@ -3,6 +3,7 @@ import {
   buildPdfPageStructure,
   buildTextBlocks,
   detectHorizontalRules,
+  detectTextItemColors,
   detectVerticalRules,
   detectTables,
   groupTextLines,
@@ -181,6 +182,56 @@ describe("PDF structured text extraction", () => {
       ],
     };
     expect(detectHorizontalRules(fakePdfjs, operatorList, viewport)).toEqual([400]);
+  });
+
+  it("keeps the colour and font metadata of each text run", () => {
+    const lines = groupTextLines([
+      { str: "Red heading", x: 40, y: 300, width: 90, fontSize: 20, fontName: "Helvetica-Bold", fontFamily: "Helvetica", bold: true, color: "CC1A1A" },
+      { str: "Blue text", x: 40, y: 270, width: 60, fontSize: 12, fontName: "Times-Roman", fontFamily: "Times New Roman", color: "1A33BF" },
+    ]);
+    expect(lines[0]).toMatchObject({ text: "Red heading", bold: true, color: "CC1A1A", fontFamily: "Helvetica", fontSize: 20 });
+    expect(lines[1]).toMatchObject({ text: "Blue text", bold: false, color: "1A33BF", fontFamily: "Times New Roman", fontSize: 12 });
+  });
+
+  it("maps fill-colour operators to text items in drawing order", () => {
+    const fakePdfjs = {
+      OPS: {
+        save: 10, restore: 11, setFillRGBColor: 59, setFillGray: 57, setFillCMYKColor: 61,
+        setFillColor: 54, setFillColorN: 55, showText: 44, showSpacedText: 45,
+        nextLineShowText: 46, nextLineSetSpacingShowText: 47,
+      },
+    } as unknown as Parameters<typeof detectTextItemColors>[0];
+    const operatorList = {
+      fnArray: [10, 59, 44, 11, 57, 44, 11, 44],
+      argsArray: [
+        null,
+        ["#cc1a1a"],
+        [[{ unicode: "Red" }]],
+        null,
+        [0.5],
+        [[{ unicode: "Grey" }]],
+        null,
+        [[{ unicode: "Black" }]],
+      ],
+    };
+    expect(detectTextItemColors(fakePdfjs, operatorList, [{ str: "Red" }, { str: "Grey" }, { str: "Black" }])).toEqual(["CC1A1A", "808080", undefined]);
+  });
+
+  it("preserves table cell styles and measured column widths", () => {
+    const structure = buildPdfPageStructure([
+      { str: "Item", x: 50, y: 750, width: 25, fontSize: 11, fontName: "Helvetica-Bold", bold: true, color: "1A8C33" },
+      { str: "Amount", x: 300, y: 750, width: 55, fontSize: 11, fontName: "Helvetica-Bold", bold: true, color: "1A8C33" },
+      { str: "Rent", x: 50, y: 725, width: 30, fontSize: 11, fontName: "Helvetica" },
+      { str: "1200", x: 300, y: 725, width: 28, fontSize: 11, fontName: "Helvetica" },
+      { str: "Power", x: 50, y: 700, width: 38, fontSize: 11, fontName: "Helvetica" },
+      { str: "80", x: 300, y: 700, width: 14, fontSize: 11, fontName: "Helvetica" },
+    ], 595, 842);
+    expect(structure.tables).toHaveLength(1);
+    const table = structure.tables[0];
+    expect(table.richRows?.[0][0]).toMatchObject({ text: "Item", bold: true, color: "1A8C33", fontSize: 11 });
+    expect(table.richRows?.[1][1]).toMatchObject({ text: "1200", fontSize: 11 });
+    expect(table.columnWidths?.length).toBe(2);
+    expect(table.columnWidths![0]).toBeGreaterThan(table.columnWidths![1]);
   });
 
   it("only marks a table as bordered when vertical rules cross its own rows", () => {

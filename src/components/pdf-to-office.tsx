@@ -32,7 +32,7 @@ function formatBytes(bytes: number) {
 export default function PdfToOffice() {
   const [file, setFile] = useState<File | null>(null);
   const [format, setFormat] = useState<PdfOfficeFormat>("docx");
-  const [mode, setMode] = useState<PdfOfficeMode>("positions");
+  const [mode, setMode] = useState<PdfOfficeMode>("editable");
   const [engine, setEngine] = useState<"browser" | "server">("browser");
   const [serverTool, setServerTool] = useState<ServerTool | null>(null);
   const [serverOcrAvailable, setServerOcrAvailable] = useState(false);
@@ -264,7 +264,7 @@ export default function PdfToOffice() {
     setServerOcr(false);
     setServerMode("layout");
     setEngine("browser");
-    setMode("positions");
+    setMode("editable");
     if (inputRef.current) inputRef.current.value = "";
   };
 
@@ -314,7 +314,7 @@ export default function PdfToOffice() {
 
   return <section className="office-convert" aria-labelledby="pdf-office-heading">
     <h2 id="pdf-office-heading">Convert a PDF to editable Word or Excel</h2>
-    <p>Exact positions keeps every text line and picture at its PDF coordinates, in the browser or on the optional server. Reflowing Word rebuilds headings, paragraphs and tables for easier editing. Picture pages embeds each PDF page as a picture when you do not need editing.</p>
+    <p>Reflowing Word (the default) rebuilds editable headings, paragraphs, tables, fonts, text sizes and colours. Exact positions keeps every text line and picture at its PDF coordinates, in the browser or on the optional server. Picture pages embeds each PDF page as a picture when you do not need editing.</p>
     <div className="privacy-note">{format === "docx" && (mode === "editable" || mode === "positions") && engine === "server"
       ? "Server exact layout uploads this PDF to the configured APOS processing server. That server handles the file in memory or a temporary directory, uses no database, and does not keep it permanently. Browser-local mode remains available and never uploads."
       : "The PDF is read in this browser. Nothing is uploaded. The converter accepts PDFs up to 25 MB and 500 pages. Image-only pages are detected individually: enable OCR to convert them to editable text, or use Visual Word for an image-based copy."}</div>
@@ -374,12 +374,12 @@ export default function PdfToOffice() {
         </label>
         {format === "docx" && <label>Word mode
           <select value={mode} disabled={busy} onChange={(event) => setMode(event.target.value as PdfOfficeMode)}>
+            <option value="editable">Reflowing Word - editable headings, paragraphs and tables</option>
             <option value="positions">Exact positions - text and pictures stay in place (browser)</option>
-            <option value="editable">Reflowing Word - headings, paragraphs and tables</option>
             <option value="visual">Picture pages - every page as a picture (not editable)</option>
           </select>
         </label>}
-        {format === "docx" && mode === "positions" && <p className="route-note">Browser-local exact positions places every text line and picture at its PDF coordinates and keeps source page sizes. Scanned pages stay as page pictures. Charts, rules and other vector artwork need the server exact-layout engine.</p>}
+        {format === "docx" && mode === "positions" && <p className="route-note">Browser-local exact positions places every text line and picture at its PDF coordinates and keeps source page sizes. Tables are placed as positioned text in this mode; choose Reflowing Word for real, editable Word tables. Scanned pages stay as page pictures. Charts, rules and other vector artwork need the server exact-layout engine.</p>}
         {format === "docx" && mode === "editable" && <p className="route-note">Reflowing Word rebuilds headings, paragraphs and tables for easier editing. Pictures are anchored, but text reflows. For exact page positions, choose Exact positions.</p>}
         {format === "docx" && mode !== "visual" && <label>Word engine
           <select aria-label="Word engine" value={engine} disabled={busy} onChange={(event) => setEngine(event.target.value as "browser" | "server")}>
